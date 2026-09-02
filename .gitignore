@@ -1,0 +1,9 @@
+config/private.json
+config/company_profiles.json
+state/
+reports/
+logs/
+.env
+__pycache__/
+*.pyc
+.DS_Store

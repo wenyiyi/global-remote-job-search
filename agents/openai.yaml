@@ -1,0 +1,4 @@
+interface:
+  display_name: "Global Remote Job Search"
+  short_description: "Search China-compatible global backend roles"
+  default_prompt: "Use $global-remote-job-search to run today’s remote backend job search in dry-run mode."

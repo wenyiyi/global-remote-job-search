@@ -1,0 +1,21 @@
+name: Daily remote job search
+on:
+  schedule:
+    - cron: '0 2 * * *' # 10:00 Asia/Shanghai
+  workflow_dispatch:
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/cache@v4
+        with:
+          path: state
+          key: remote-job-seen-${{ github.run_id }}
+          restore-keys: remote-job-seen-
+      - name: Run
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: python3 scripts/job_search.py
