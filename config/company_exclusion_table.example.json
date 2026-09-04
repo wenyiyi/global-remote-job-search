@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "source_url": "https://example.feishu.cn/wiki/REPLACE_WITH_YOUR_WIKI_TOKEN",
+  "base_token": "REPLACE_WITH_YOUR_BASE_TOKEN",
+  "table_id": "REPLACE_WITH_YOUR_TABLE_ID",
+  "company_field": "公司名称"
+}

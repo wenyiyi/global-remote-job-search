@@ -2,7 +2,7 @@
 """Public remote-job search, conservative China screening, reports and Feishu cards."""
 from __future__ import annotations
 
-import argparse, datetime as dt, email.utils, hashlib, html, json, logging, os, re, tempfile, time
+import argparse, datetime as dt, email.utils, hashlib, html, json, logging, os, re, subprocess, tempfile, time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib import error, parse, request
@@ -50,7 +50,7 @@ def setup_private_config(root=ROOT, input_fn=input):
     cfg={
         "candidate":{
             "name":ask("称呼（可使用昵称）","Private candidate"),
-            "base":ask("工作所在地/时区","China (UTC+8)"),
+            "base":ask("候选人常驻地/时区（用于判断远程可行性）","China (UTC+8)"),
             "years_backend":ask_int("后端经验年数",5),
             "resume_paths":resume_paths,
             "skills":csv("技能，英文逗号分隔",["Go","Python","Java","microservices","distributed systems","Redis","Kafka","MySQL"]),
@@ -58,9 +58,10 @@ def setup_private_config(root=ROOT, input_fn=input):
         "preferences":{
             "target_titles":csv("目标岗位，英文逗号分隔",["Backend Engineer","Platform Engineer","Distributed Systems Engineer"]),
             "preferred_remote":csv("优先远程范围，英文逗号分隔",["worldwide","global","APAC","Asia","China"]),
+            "excluded_company_countries":csv("排除公司所属国家/地区，英文逗号分隔（未知时保留待核实）",["China","中国","中华人民共和国"]),
             "preferred_engagement":csv("合作形式，英文逗号分隔",["full-time","long-term contractor","EOR"]),
             "minimum_score":ask_float("最低匹配度",4.0,1.0,5.0),
-            "max_results":ask_int("每次最多岗位数",50,1,50),
+            "max_results":0,
             "max_age_days":ask_int("只保留最近多少天",7,1,365),
         },
         "company_enrichment":{"enabled":True,"request_delay_seconds":0.25},
@@ -118,7 +119,7 @@ def format_compensation(minimum=None, maximum=None, currency="", period=""):
     return " ".join(x for x in (currency,span+suffix) if x).strip()
 
 
-def normalized_job(source, sid, company, title, url, published, location, description, compensation="", company_country="", company_size=""):
+def normalized_job(source, sid, company, title, url, published, location, description, compensation="", company_country="", company_size="", company_industry=""):
     if isinstance(published, (int, float)):
         published = dt.datetime.fromtimestamp(published, dt.timezone.utc).date().isoformat()
     return {"source": source, "source_id": str(sid or url), "company": company or "Unknown",
@@ -126,7 +127,8 @@ def normalized_job(source, sid, company, title, url, published, location, descri
             "remote_scope_raw": strip_html(location) or "Not stated", "description": strip_html(description),
             "compensation_raw": strip_html(str(compensation)) if compensation else "",
             "company_country_raw": strip_html(str(company_country)) if company_country else "",
-            "company_size_raw": strip_html(str(company_size)) if company_size else ""}
+            "company_size_raw": strip_html(str(company_size)) if company_size else "",
+            "company_industry_raw": strip_html(str(company_industry)) if company_industry else ""}
 
 
 def fetch_source(src):
@@ -144,6 +146,23 @@ def fetch_source(src):
         rows = fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{src['board_token']}/jobs?content=true").get("jobs", [])
         return [normalized_job(name, x.get("id"), name.replace(" example", ""), x.get("title"), x.get("absolute_url"),
                 x.get("updated_at"), (x.get("location") or {}).get("name"), x.get("content")) for x in rows]
+    if kind == "workable":
+        data = fetch_json(f"https://www.workable.com/api/accounts/{src['account_subdomain']}?details=true")
+        rows = data.get("jobs", data.get("results", [])) if isinstance(data, dict) else data
+        jobs=[]
+        for x in rows or []:
+            location=x.get("location") or {}
+            if isinstance(location, dict):
+                location_text=location.get("location_str") or ", ".join(v for v in (location.get("city"), location.get("country")) if v)
+            else:
+                location_text=str(location)
+            salary=x.get("salary") or {}
+            jobs.append(normalized_job(name, x.get("shortcode") or x.get("id"), src.get("company") or name.replace(" example", ""),
+                        x.get("title") or x.get("full_title"), x.get("application_url") or x.get("url") or x.get("shortlink"),
+                        x.get("created_at") or x.get("published_at"), location_text, x.get("description") or x.get("description_html"),
+                        format_compensation(salary.get("salary_from"), salary.get("salary_to"), salary.get("salary_currency"), salary.get("salary_period")),
+                        ""))
+        return jobs
     if kind == "lever":
         rows = fetch_json(f"https://api.lever.co/v0/postings/{src['site']}?mode=json")
         return [normalized_job(name, x.get("id"), name.replace(" example", ""), x.get("text"), x.get("hostedUrl"),
@@ -169,7 +188,7 @@ def fetch_source(src):
             jobs.append(normalized_job(name, x.get("guid"), x.get("companyName"), x.get("title"),
                         x.get("applicationLink"), x.get("pubDate"), scope, x.get("description") or x.get("excerpt"),
                         format_compensation(x.get("minSalary"),x.get("maxSalary"),x.get("currency"),x.get("salaryPeriod")),
-                        x.get("companyCountry") or x.get("companyLocation"), x.get("companySize")))
+                        x.get("companyCountry") or x.get("companyLocation"), x.get("companySize"), x.get("companyIndustry")))
         return jobs
     if kind == "remoteok":
         rows=fetch_json(src["url"])
@@ -221,6 +240,8 @@ HARD_EXCLUDE = ("us only", "united states only", "must reside in the us", "u.s. 
                 "must be based in the united states")
 DIRECT = ("worldwide", "anywhere", "global remote", "including china", "china", "contractor", "eor")
 CONFIRM = ("apac", "asia", "global", "remote")
+BLOCKCHAIN_STRONG = re.compile(r"\b(?:blockchain|web3|cryptocurrenc(?:y|ies)|decentralized finance|defi|solidity|ethereum|bitcoin|nfts?|on-chain|smart contracts?)\b", re.I)
+CRYPTO_BUSINESS = re.compile(r"\bcrypto\s*(?:exchange|trading|wallet|asset|protocol|token|ecosystem|platform|market|industry|payments?|custody|company|startup)\b", re.I)
 
 TITLE_ZH = (("senior", "高级"), ("staff", "资深/Staff"), ("principal", "首席"),
             ("backend", "后端"), ("back-end", "后端"), ("platform", "平台"),
@@ -266,13 +287,54 @@ def enrich_company(job, profiles):
     profile=profiles.get(job["company"].strip().lower(), {})
     country=job.get("company_country_raw") or profile.get("country") or "待核实"
     size=job.get("company_size_raw") or profile.get("size") or "待核实"
-    source="招聘源" if job.get("company_country_raw") or job.get("company_size_raw") else ("本地公司资料缓存" if profile else "暂无可靠公开字段")
-    return {**job, "company_country": country, "company_size": size, "company_profile_source": source,
-            "company_profile_url": profile.get("source_url", ""), **chinese_job_summary(job)}
+    industry=job.get("company_industry_raw") or profile.get("industry") or "待核实"
+    source="招聘源" if any(job.get(k) for k in ("company_country_raw","company_size_raw","company_industry_raw")) else ("本地公司资料缓存" if profile else "暂无可靠公开字段")
+    summary=chinese_job_summary(job)
+    company_analysis=profile.get("analysis_zh") or (
+        f"{job['company']}：所属国家/地区为{country}，行业为{industry}，规模为{size}。"
+        "以上仅汇总已取得的公开字段；主营业务、雇佣实体及经营情况仍应通过公司官网核验。")
+    job_analysis=(f"岗位重点：{summary['content_zh']}；任职条件：{summary['requirements_zh']}；"
+                  f"技术栈：{summary['tech_stack_zh']}。匹配度 {job['score']:.1f}/5，"
+                  f"中国远程可行性为“{job['china_feasibility']}”；建议：{job['recommendation']}。")
+    return {**job, "company_country": country, "company_size": size, "company_industry": industry,
+            "company_profile_source": source, "company_profile_url": profile.get("source_url", ""),
+            "company_analysis_zh": company_analysis, "job_analysis_zh": job_analysis, **summary}
 
 
 def company_key(name):
     return re.sub(r"[^a-z0-9]", "", re.sub(r"\b(inc|ltd|llc|corp|corporation|company|co)\b", "", name.lower()))
+
+
+def company_alias_keys(name):
+    """Normalize harmless formatting differences without fuzzy-matching unrelated companies."""
+    value=strip_html(str(name or "")).strip()
+    markdown=re.fullmatch(r"\[([^]]+)\]\(https?://[^)]+\)", value, flags=re.I)
+    if markdown: value=markdown.group(1)
+    keys={company_key(value)}
+    without_domain=re.sub(r"\.(?:com|io|ai|co|net|org)\s*$", "", value, flags=re.I)
+    keys.add(company_key(without_domain))
+    return {key for key in keys if key}
+
+
+def load_company_exclusions(root):
+    path=root/"config/company_exclusion_table.json"
+    if not path.exists(): return {}
+    cfg=load_json(path)
+    if not cfg.get("enabled", True): return {}
+    names=[]; offset=0
+    while True:
+        cmd=["lark-cli","base","+record-list","--base-token",cfg["base_token"],"--table-id",cfg["table_id"],
+             "--field-id",cfg.get("company_field","公司名称"),"--as","user","--format","json","--limit","200","--offset",str(offset)]
+        result=subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        if result.returncode != 0: raise RuntimeError("公司排除表读取失败；为避免重复推送，本次任务已停止")
+        payload=json.loads(result.stdout)
+        if not payload.get("ok"): raise RuntimeError("公司排除表授权或读取失败；为避免重复推送，本次任务已停止")
+        data=payload.get("data",{}); rows=data.get("data",[])
+        names.extend(row[0] for row in rows if row and row[0])
+        if not data.get("has_more"): break
+        if not rows: raise RuntimeError("公司排除表分页异常；为避免重复推送，本次任务已停止")
+        offset += len(rows)
+    return {key:name for name in names for key in company_alias_keys(name)}
 
 
 def employee_band(value):
@@ -305,9 +367,19 @@ def wikidata_company_profiles(companies, delay=.25):
             if country_qid:
                 country_entity=fetch_json("https://www.wikidata.org/wiki/Special:EntityData/"+country_qid+".json", attempts=2)["entities"][country_qid]
                 labels=country_entity.get("labels",{}); country=(labels.get("zh") or labels.get("en") or {}).get("value","")
+            industries=[]
+            for industry_claim in (claims.get("P452") or [])[:2]:
+                industry_value=industry_claim.get("mainsnak",{}).get("datavalue",{}).get("value",{})
+                industry_qid=industry_value.get("id") if isinstance(industry_value,dict) else ""
+                if industry_qid:
+                    industry_entity=fetch_json("https://www.wikidata.org/wiki/Special:EntityData/"+industry_qid+".json", attempts=2)["entities"][industry_qid]
+                    labels=industry_entity.get("labels",{})
+                    label=(labels.get("zh") or labels.get("en") or {}).get("value","")
+                    if label: industries.append(label)
             employees=(claims.get("P1128") or [{}])[0].get("mainsnak",{}).get("datavalue",{}).get("value",{})
             amount=employees.get("amount") if isinstance(employees,dict) else ""
             found[company.lower()]={"country":country or "待核实", "size":employee_band(amount) or "待核实",
+                                    "industry":"、".join(dict.fromkeys(industries)) or "待核实",
                                     "source_url":"https://www.wikidata.org/wiki/"+qid}
         except Exception as exc: logging.warning("company entity skipped for %s: %s", company, type(exc).__name__)
         time.sleep(delay)
@@ -315,6 +387,7 @@ def wikidata_company_profiles(companies, delay=.25):
 
 
 def assess(job, cfg):
+    if is_blockchain_job(job): return None
     title = job["title"].lower(); scope = job["remote_scope_raw"].lower(); text = (title + " " + job["description"]).lower()
     title_match=any(w in title for w in TITLE_WORDS)
     generic_engineer=any(w in title for w in ("software engineer","software developer","systems engineer","infrastructure engineer","full stack engineer","full-stack engineer","full stack developer","full-stack developer"))
@@ -349,6 +422,23 @@ def assess(job, cfg):
             "recommendation": "建议投递" if score >= threshold and feasibility == "可直接投" else ("建议先确认中国雇佣/EOR/contractor" if score >= threshold else "暂不投递")}
 
 
+def company_country_allowed(job, cfg):
+    """Exclude only a verified exact company-country label; retain unknowns for manual verification."""
+    country = job.get("company_country", "").strip().casefold()
+    if not country or country in ("待核实", "pending verification"):
+        return True
+    excluded = {str(x).strip().casefold() for x in cfg["preferences"].get("excluded_company_countries", [])}
+    return country not in excluded
+
+
+def is_blockchain_job(job):
+    """High-precision exclusion; do not reject ordinary cryptography/security work."""
+    title_company=f"{job.get('title','')} {job.get('company','')}"
+    description=job.get("description","")
+    if BLOCKCHAIN_STRONG.search(title_company) or re.search(r"\bcrypto\b", title_company, re.I): return True
+    return bool(BLOCKCHAIN_STRONG.search(description) or CRYPTO_BUSINESS.search(description))
+
+
 def uid(job):
     raw = f"{job['source']}|{job['source_id']}|{job['url']}"
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
@@ -359,7 +449,7 @@ def published_date(job):
     except (TypeError, ValueError): return None
 
 
-def build_report(jobs, errors, now):
+def build_report(jobs, filtered_jobs, filtered_total, errors, now):
     lines = [f"# 全球远程后端岗位日报 - {now:%Y-%m-%d}", "", f"新增高匹配岗位：{len(jobs)} 个", ""]
     if not jobs: lines += ["没有符合条件的新岗位。", ""]
     for i, j in enumerate(jobs, 1):
@@ -368,26 +458,46 @@ def build_report(jobs, errors, now):
                   f"- 发布日期：{j['published_at']}", f"- 来源：{source}", f"- Remote 原文：{j['remote_scope_raw']}",
                   *([f"- 薪资范围：{j['compensation_raw']}"] if j.get("compensation_raw") else []),
                   f"- 公司所属国家/地区：{j['company_country']}", f"- 公司规模：{j['company_size']}",
+                  f"- 公司所属行业：{j['company_industry']}",
                   f"- 公司信息依据：" + (f"[{j['company_profile_source']}]({j['company_profile_url']})" if j.get("company_profile_url") else j['company_profile_source']),
+                  f"- 公司分析（中文）：{j['company_analysis_zh']}",
                   f"- 中国 base 可行性：{j['china_feasibility']}", f"- 匹配度：{j['score']:.1f}/5",
                   f"- 中文职位名：{j['title_zh']}", f"- 岗位内容（中文）：{j['content_zh']}",
+                  f"- 岗位分析（中文）：{j['job_analysis_zh']}",
                   f"- 任职要求（中文）：{j['requirements_zh']}", f"- 技术栈：{j['tech_stack_zh']}",
                   f"- 英文原文摘要：{j['original_excerpt']}", f"- 匹配原因：{j['match_reason']}",
                   f"- 主要缺口：{j['main_gaps']}", f"- 建议：{j['recommendation']}", ""]
+    lines += ["## 已过滤的重复岗位（供核对）", "", f"因公司已出现在岗位进度表而过滤：{filtered_total} 个；以下列出 {len(filtered_jobs)} 个。", ""]
+    if not filtered_jobs: lines += ["本次没有因公司排除表而过滤的候选岗位。", ""]
+    for i, j in enumerate(filtered_jobs, 1):
+        source=f"[{j['source']}]({j['source_url']})" if j.get("source_url") else j["source"]
+        lines += [f"{i}. [{j['company']} - {j['title']}]({j['url']})",
+                  f"   - 表格匹配公司：{j['exclusion_match']}", f"   - 发布日期：{j['published_at']}｜来源：{source}",
+                  f"   - Remote 原文：{j['remote_scope_raw']}｜原始匹配度：{j['score']:.1f}/5", ""]
     if errors: lines += ["## 来源错误", ""] + [f"- {e}" for e in errors] + [""]
     return "\n".join(lines)
 
 
-def build_payload(jobs, now):
+def build_payload(jobs, filtered_jobs, filtered_total, now):
     blocks = [{"tag":"div","text":{"tag":"lark_md","content":f"**新增高匹配岗位：{len(jobs)} 个**"}}]
     for j in jobs:
         source = f"[{j['source']}]({j['source_url']})" if j.get("source_url") else j["source"]
         salary = f"\n薪资：{j['compensation_raw']}" if j.get("compensation_raw") else ""
         content = (f"**{j['company']}｜{j['title']}**  {j['score']:.1f}/5\n"
                    f"{j['china_feasibility']}｜{j['published_at']}｜来源：{source}{salary}\n"
-                   f"公司：{j['company_country']}｜规模：{j['company_size']}\n"
-                   f"中文解读：{j['content_zh']}\n技术栈：{j['tech_stack_zh']}\n"
+                   f"公司：{j['company_country']}｜行业：{j['company_industry']}｜规模：{j['company_size']}\n"
+                   f"公司分析：{j['company_analysis_zh']}\n"
+                   f"岗位分析：{j['job_analysis_zh']}\n"
                    f"[{j['recommendation']} · 打开申请页]({j['url']})")
+        blocks.append({"tag":"div","text":{"tag":"lark_md","content":content}})
+    blocks.append({"tag":"hr"})
+    blocks.append({"tag":"div","text":{"tag":"lark_md","content":
+        f"**已过滤的重复岗位（供核对，不计入推荐）：{filtered_total} 个**\n以下列出 {len(filtered_jobs)} 个；公司来自岗位进度表。"}})
+    for j in filtered_jobs:
+        source=f"[{j['source']}]({j['source_url']})" if j.get("source_url") else j["source"]
+        content=(f"**[{j['company']}｜{j['title']}]({j['url']})**\n"
+                 f"表格匹配：{j['exclusion_match']}｜{j['published_at']}｜来源：{source}\n"
+                 f"Remote：{j['remote_scope_raw']}｜原始匹配度：{j['score']:.1f}/5")
         blocks.append({"tag":"div","text":{"tag":"lark_md","content":content}})
     return {"msg_type":"interactive","card":{"header":{"template":"purple","title":{"tag":"plain_text","content":f"全球远程后端岗位日报 {now:%Y-%m-%d}"}},"elements":blocks}}
 
@@ -418,33 +528,49 @@ def execute(args, root=ROOT, state_override=None):
             except Exception as exc: errors.append(f"{src['name']}: {type(exc).__name__}")
             time.sleep(float(src.get("rate_seconds", 0)))
         logging.info("source_counts=%s", ", ".join(f"{n}:{c}" for n,c in source_counts))
+    excluded_companies={} if args.fixture else load_company_exclusions(root)
+    kept_raw=[]; company_filtered_raw=[]
+    for job in raw:
+        matches=company_alias_keys(job.get("company","")) & excluded_companies.keys()
+        if matches:
+            company_filtered_raw.append({**job,"exclusion_match":excluded_companies[sorted(matches)[0]]})
+        else: kept_raw.append(job)
+    raw=kept_raw
+    logging.info("company_exclusion_table=%d filtered_raw_jobs=%d", len(excluded_companies), len(company_filtered_raw))
     state_path = Path(state_override) if state_override else root / "state/seen.json"
     seen = set(load_json(state_path).get("seen", [])) if state_path.exists() else set()
     unique_raw={uid(j):j for j in raw}.values()
     scored = [x for j in unique_raw if (x := assess(j, cfg)) is not None]
-    threshold=float(cfg["preferences"].get("minimum_score", 4)); cap=min(50, int(cfg["preferences"].get("max_results", 50)))
+    filtered_scored=[{**x,"exclusion_match":j["exclusion_match"]} for j in company_filtered_raw if (x := assess(j, cfg)) is not None]
+    threshold=float(cfg["preferences"].get("minimum_score", 4))
     max_age=0 if args.fixture else max(0, int(cfg["preferences"].get("max_age_days", 7)))
     cutoff=dt.date.today()-dt.timedelta(days=max_age)
     eligible=[j for j in scored if j["score"] >= threshold and j["china_feasibility"] != "不建议投" and uid(j) not in seen]
     if max_age: eligible=[j for j in eligible if published_date(j) and published_date(j) >= cutoff]
-    selected = sorted(eligible, key=lambda x:(published_date(x) or dt.date.min, x["score"]), reverse=True)[:cap]
+    filtered_eligible=[j for j in filtered_scored if j["score"] >= threshold and j["china_feasibility"] != "不建议投"]
+    if max_age: filtered_eligible=[j for j in filtered_eligible if published_date(j) and published_date(j) >= cutoff]
+    filtered_total=len(filtered_eligible); audit_cap=30
+    filtered_jobs=sorted(filtered_eligible, key=lambda x:(published_date(x) or dt.date.min, x["score"]), reverse=True)[:audit_cap]
+    selected = sorted(eligible, key=lambda x:(published_date(x) or dt.date.min, x["score"]), reverse=True)
     profiles_path=root/"config/company_profiles.json"
     profiles=load_json(profiles_path) if profiles_path.exists() else {}
     if not args.fixture and cfg.get("company_enrichment",{}).get("enabled", True):
         missing=sorted({j["company"] for j in selected if j["company"].lower() not in profiles})
         profiles.update(wikidata_company_profiles(missing, float(cfg.get("company_enrichment",{}).get("request_delay_seconds", .25))))
     selected=[enrich_company(j, profiles) for j in selected]
+    selected=[j for j in selected if company_country_allowed(j, cfg)]
     now=dt.datetime.now(); report_dir=root/"reports"; log_dir=root/"logs"; report_dir.mkdir(exist_ok=True); log_dir.mkdir(exist_ok=True)
     stamp=now.strftime("%Y%m%d-%H%M%S-%f"); report=report_dir/f"remote-jobs-{stamp}.md"; preview=report_dir/f"remote-jobs-{stamp}-payload.json"
-    report.write_text(build_report(selected, errors, now), encoding="utf-8")
-    payload=build_payload(selected, now); preview.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    logging.info("report=%s new=%d source_errors=%d", report, len(selected), len(errors))
+    report.write_text(build_report(selected, filtered_jobs, filtered_total, errors, now), encoding="utf-8")
+    payload=build_payload(selected, filtered_jobs, filtered_total, now); preview.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    logging.info("report=%s new=%d filtered_audit=%d source_errors=%d", report, len(selected), filtered_total, len(errors))
     if args.dry_run: logging.info("dry-run: Feishu skipped; durable state unchanged")
-    elif not selected: logging.info("没有新岗位；不发送飞书")
+    elif not selected and not filtered_jobs: logging.info("没有新岗位或过滤审计项；不发送飞书")
     else:
         post_feishu(payload)
-        state_path.parent.mkdir(exist_ok=True); state_path.write_text(json.dumps({"seen":sorted(seen|{uid(j) for j in selected})}, indent=2), encoding="utf-8")
-        logging.info("飞书推送成功；已更新去重状态")
+        if selected:
+            state_path.parent.mkdir(exist_ok=True); state_path.write_text(json.dumps({"seen":sorted(seen|{uid(j) for j in selected})}, indent=2), encoding="utf-8")
+        logging.info("飞书推送成功；已发送推荐岗位与过滤审计清单")
     return selected, report, preview
 
 
@@ -453,18 +579,59 @@ def self_test():
     original=os.environ.pop("FEISHU_WEBHOOK_URL", None)
     try:
         with tempfile.TemporaryDirectory() as td:
-            setup_root=Path(td)/"setup"; answers=iter(["","","","","","","","","","",""])
+            setup_root=Path(td)/"setup"; answers=iter(["","","","","","","","","","","",""])
             setup_path=setup_private_config(setup_root, lambda _prompt: next(answers))
-            assert setup_path.stat().st_mode & 0o777 == 0o600 and load_json(setup_path)["preferences"]["max_age_days"]==7
+            setup_cfg=load_json(setup_path)
+            assert setup_path.stat().st_mode & 0o777 == 0o600 and setup_cfg["preferences"]["max_age_days"]==7
+            assert "China" in setup_cfg["preferences"]["excluded_company_countries"]
+            assert load_company_exclusions(setup_root) == {}
+            (setup_root/"config/company_exclusion_table.json").write_text(json.dumps({
+                "base_token":"base-test", "table_id":"table-test", "company_field":"公司名称"}), encoding="utf-8")
+            original_run=subprocess.run
+            class Completed:
+                returncode=0; stdout=json.dumps({"ok":True,"data":{"data":[["[Suger.io](http://Suger.io)"],["ElevenLabs"]],"has_more":False}})
+            subprocess.run=lambda *args, **kwargs: Completed()
+            exclusions=load_company_exclusions(setup_root)
+            subprocess.run=original_run
+            assert company_alias_keys("Suger") & exclusions.keys() and company_alias_keys("eleven labs") & exclusions.keys()
+            (setup_root/"config/company_profiles.json").write_text(json.dumps({"acme global": {
+                "country":"United States", "industry":"Cloud software", "size":"201–500 employees",
+                "analysis_zh":"Acme Global 是一家美国云软件公司；具体雇佣实体需通过官网核验。",
+                "source_url":"https://example.com/acme"}}, ensure_ascii=False), encoding="utf-8")
+            original_fetch_json=globals()["fetch_json"]
+            globals()["fetch_json"]=lambda _url: {"jobs":[{"id":"w1","shortcode":"ABC123","title":"Backend Engineer",
+                "application_url":"https://apply.workable.com/j/ABC123","created_at":"2026-08-29",
+                "location":{"location_str":"Remote - Worldwide","country":"United States"},
+                "description":"Build Python backend services", "salary":{"salary_from":100000,"salary_to":140000,"salary_currency":"USD","salary_period":"year"}}]}
+            workable=fetch_source({"kind":"workable","name":"Example via Workable","account_subdomain":"example","company":"Example"})
+            globals()["fetch_json"]=original_fetch_json
+            assert len(workable)==1 and workable[0]["company"]=="Example" and workable[0]["compensation_raw"]=="USD 100,000–140,000/year"
+            blockchain=normalized_job("test","b1","Chain Labs","Backend Engineer - Web3","https://example.com/b1",
+                                      "2026-09-01","Worldwide","Build blockchain infrastructure using Solidity")
+            crypto=normalized_job("test","b2","Example","Software Engineer","https://example.com/b2",
+                                  "2026-09-01","Worldwide","Backend services for a crypto exchange and digital asset trading")
+            security=normalized_job("test","s1","Security Labs","Backend Engineer","https://example.com/s1",
+                                    "2026-09-01","Worldwide","Build Python services using modern cryptography and key management")
+            assert assess(blockchain, setup_cfg) is None and assess(crypto, setup_cfg) is None
+            assert assess(security, setup_cfg) is not None
             # Test production-state semantics without network by validating selection then writing the same IDs.
             A.dry_run=True; first, report, preview=execute(A, root=setup_root, state_override=Path(td)/"seen.json")
             assert len(first)==2 and all(j["score"]>=4 for j in first)
             payload=load_json(preview); assert payload["msg_type"]=="interactive"
-            assert all("https://" in e["text"]["content"] for e in payload["card"]["elements"][1:])
+            assert all("https://" in e["text"]["content"] for e in payload["card"]["elements"][1:3])
             assert "薪资：USD 120,000–160,000/year" in json.dumps(payload,ensure_ascii=False)
             report_text=report.read_text(encoding="utf-8")
             assert "薪资范围：USD 120,000–160,000/year" in report_text
-            assert "公司所属国家/地区：待核实" in report_text and "岗位内容（中文）" in report_text
+            assert "公司所属国家/地区：United States" in report_text
+            assert "公司所属行业：Cloud software" in report_text and "公司分析（中文）" in report_text
+            assert "岗位内容（中文）" in report_text and "岗位分析（中文）" in report_text
+            payload_text=json.dumps(payload,ensure_ascii=False)
+            assert "行业：Cloud software" in payload_text and "公司分析：" in payload_text and "岗位分析：" in payload_text
+            audit={**first[0],"exclusion_match":"Acme Global"}
+            audit_report=build_report([], [audit], 1, [], dt.datetime.now())
+            audit_payload=json.dumps(build_payload([], [audit], 1, dt.datetime.now()), ensure_ascii=False)
+            assert "已过滤的重复岗位（供核对）" in audit_report and "表格匹配公司：Acme Global" in audit_report
+            assert "不计入推荐" in audit_payload and "表格匹配：Acme Global" in audit_payload
             state=Path(td)/"seen.json"; state.write_text(json.dumps({"seen":[uid(j) for j in first]}), encoding="utf-8")
             second, _, _=execute(A, root=setup_root, state_override=state); assert len(second)==0
             print(f"SELF-TEST OK: config, scoring, dedup, report, payload; report={report}")

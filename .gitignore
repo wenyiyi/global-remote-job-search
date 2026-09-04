@@ -1,5 +1,6 @@
 config/private.json
 config/company_profiles.json
+config/company_exclusion_table.json
 state/
 reports/
 logs/

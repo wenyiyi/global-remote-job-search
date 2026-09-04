@@ -1,7 +1,9 @@
 {
   "example company": {
     "country": "United States",
+    "industry": "Software",
     "size": "201–500 employees",
+    "analysis_zh": "这是一家美国软件公司；主营业务、雇佣实体与经营情况请以公司官网为准。",
     "source_url": "https://example.com/about"
   }
 }
