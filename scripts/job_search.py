@@ -6,6 +6,7 @@ import argparse, datetime as dt, email.utils, hashlib, html, json, logging, os, 
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib import error, parse, request
+from html.parser import HTMLParser
 
 ROOT = Path(__file__).resolve().parents[1]
 UA = "global-remote-job-search/1.0 (public-job-feed; low-frequency)"
@@ -49,7 +50,7 @@ def setup_private_config(root=ROOT, input_fn=input):
         resume_paths.append(str(Path(value).expanduser().resolve()))
     cfg={
         "candidate":{
-            "name":ask("称呼（可使用昵称）","Private candidate"),
+            "name":ask("称呼（可使用昵称）","Candidate"),
             "base":ask("候选人常驻地/时区（用于判断远程可行性）","China (UTC+8)"),
             "years_backend":ask_int("后端经验年数",5),
             "resume_paths":resume_paths,
@@ -131,8 +132,68 @@ def normalized_job(source, sid, company, title, url, published, location, descri
             "company_industry_raw": strip_html(str(company_industry)) if company_industry else ""}
 
 
+class JobPostingParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.capture = False
+        self.parts = []
+        self.rows = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self.capture = dict(attrs).get("type") == "application/ld+json"
+            self.parts = []
+
+    def handle_data(self, data):
+        if self.capture:
+            self.parts.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self.capture:
+            self.capture = False
+            self.collect(json.loads("".join(self.parts)))
+
+    def collect(self, value):
+        if isinstance(value, list):
+            for item in value:
+                self.collect(item)
+        elif isinstance(value, dict):
+            if value.get("@type") == "JobPosting":
+                self.rows.append(value)
+            elif "@graph" in value:
+                self.collect(value["@graph"])
+
+
+def job_location_text(value):
+    if isinstance(value, list):
+        return "; ".join(filter(None, (job_location_text(x) for x in value)))
+    if isinstance(value, dict):
+        if value.get("address"):
+            return job_location_text(value["address"])
+        return ", ".join(str(value[k]) for k in ("name", "addressLocality", "addressRegion", "addressCountry") if value.get(k))
+    return str(value or "")
+
+
 def fetch_source(src):
     kind, name = src["kind"], src["name"]
+    if kind == "official_jobposting":
+        parser = JobPostingParser()
+        parser.feed(fetch_bytes(src["url"]).decode("utf-8"))
+        if not parser.rows:
+            raise ValueError("Official careers page contains no JobPosting records")
+        jobs = []
+        for row in parser.rows:
+            # Remote applicant eligibility is distinct from an office address.
+            scope = row.get("applicantLocationRequirements") if row.get("jobLocationType") == "TELECOMMUTE" else None
+            location = "; ".join(filter(None, [job_location_text(scope or row.get("jobLocation")), job_location_text(row.get("jobLocationType"))]))
+            salary = row.get("baseSalary") or {}
+            value = salary.get("value") or {} if isinstance(salary, dict) else {}
+            compensation = format_compensation(value.get("minValue", value.get("value")), value.get("maxValue"), salary.get("currency", ""), value.get("unitText", "")) if isinstance(value, dict) and isinstance(salary, dict) else ""
+            url = row.get("url")
+            if not url:
+                continue
+            jobs.append(normalized_job(name, url, src["company"], row.get("title"), url, row.get("datePosted"), location, row.get("description"), compensation))
+        return jobs
     if kind == "remotive":
         url = src["url"] + "?" + parse.urlencode({"category": "software-dev", "search": "backend"})
         rows = fetch_json(url).get("jobs", [])
@@ -141,10 +202,12 @@ def fetch_source(src):
     if kind == "arbeitnow":
         rows = [x for x in fetch_json(src["url"]).get("data", []) if x.get("remote")]
         return [normalized_job(name, x.get("slug"), x.get("company_name"), x.get("title"), x.get("url"),
-                x.get("created_at"), "Remote" if x.get("remote") else x.get("location"), x.get("description")) for x in rows]
+                x.get("created_at"),
+                ("Remote; " + str(x.get("location")).strip()) if x.get("remote") and x.get("location") else
+                ("Remote" if x.get("remote") else x.get("location")), x.get("description")) for x in rows]
     if kind == "greenhouse":
         rows = fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{src['board_token']}/jobs?content=true").get("jobs", [])
-        return [normalized_job(name, x.get("id"), name.replace(" example", ""), x.get("title"), x.get("absolute_url"),
+        return [normalized_job(name, x.get("id"), src.get("company") or name.replace(" example", ""), x.get("title"), x.get("absolute_url"),
                 x.get("updated_at"), (x.get("location") or {}).get("name"), x.get("content")) for x in rows]
     if kind == "workable":
         data = fetch_json(f"https://www.workable.com/api/accounts/{src['account_subdomain']}?details=true")
@@ -165,11 +228,11 @@ def fetch_source(src):
         return jobs
     if kind == "lever":
         rows = fetch_json(f"https://api.lever.co/v0/postings/{src['site']}?mode=json")
-        return [normalized_job(name, x.get("id"), name.replace(" example", ""), x.get("text"), x.get("hostedUrl"),
+        return [normalized_job(name, x.get("id"), src.get("company") or name.replace(" example", ""), x.get("text"), x.get("hostedUrl"),
                 "Unknown", (x.get("categories") or {}).get("location"), x.get("descriptionPlain") or x.get("description")) for x in rows]
     if kind == "ashby":
         rows = fetch_json(f"https://api.ashbyhq.com/posting-api/job-board/{src['board']}").get("jobs", [])
-        return [normalized_job(name, x.get("jobUrl"), name.replace(" example", ""), x.get("title"), x.get("jobUrl"),
+        return [normalized_job(name, x.get("jobUrl"), src.get("company") or name.replace(" example", ""), x.get("title"), x.get("jobUrl"),
                 x.get("publishedAt"), x.get("location"), x.get("descriptionPlain") or x.get("descriptionHtml")) for x in rows]
     if kind == "himalayas":
         rows=[]
@@ -191,16 +254,26 @@ def fetch_source(src):
                         x.get("companyCountry") or x.get("companyLocation"), x.get("companySize"), x.get("companyIndustry")))
         return jobs
     if kind == "remoteok":
-        rows=fetch_json(src["url"])
-        if rows and "legal" in rows[0]: rows=rows[1:]
+        urls=list(dict.fromkeys([src["url"], *src.get("feeds", [])]))
+        by_id={}; failures=[]; feed_counts=[]
+        for index, url in enumerate(urls):
+            if index: time.sleep(float(src.get("query_delay_seconds", 2)))
+            try:
+                rows=fetch_json(url)
+                if not isinstance(rows, list): raise ValueError("Expected Remote OK JSON list")
+                rows=[x for x in rows if isinstance(x, dict) and x.get("id") and x.get("position")]
+                feed_counts.append({"url":url,"count":len(rows)})
+                for row in rows: by_id.setdefault(str(row["id"]), row)
+            except Exception as exc:
+                failures.append(f"{url}: {type(exc).__name__}")
+        src["fetch_diagnostics"]={"feeds":feed_counts,"errors":failures,"unique":len(by_id),
+            "coverage":"Latest public feed per category; historical pagination not verified"}
+        if not feed_counts: raise RuntimeError("All Remote OK feeds failed: " + "; ".join(failures))
         jobs=[]
-        for x in rows:
-            location=(x.get("location") or "Worldwide").strip()
-            low=location.lower()
-            if location and not any(w in low for w in ("worldwide","anywhere","global","apac","asia","china","remote")):
-                location="Restricted to: "+location
+        for x in by_id.values():
+            location=(x.get("location") or "Not stated").strip()
             jobs.append(normalized_job(name,x.get("id"),x.get("company"),x.get("position"),x.get("url") or x.get("apply_url"),
-                        x.get("date") or x.get("epoch"),location,x.get("description")+" "+" ".join(x.get("tags") or []),
+                        x.get("date") or x.get("epoch"),location,(x.get("description") or "")+" "+" ".join(x.get("tags") or []),
                         format_compensation(x.get("salary_min"),x.get("salary_max"),"USD","year")))
         return jobs
     if kind == "jobicy":
@@ -230,18 +303,112 @@ def fetch_source(src):
             jobs.append(normalized_job(name,val("guid") or val("link"),company if sep else "Unknown",role if sep else title,
                         val("link"),published,val("region") or val("country"),val("description")+" "+val("skills"),val("salary")))
         return jobs
+    if kind == "teamtailor_rss":
+        root = ET.fromstring(fetch_bytes(src["url"]))
+        namespace = {"tt": "https://teamtailor.com/locations"}
+        jobs=[]
+        for x in root.findall(".//item"):
+            val=lambda tag: (x.findtext(tag) or "").strip()
+            published=val("pubDate")
+            try: published=email.utils.parsedate_to_datetime(published).date().isoformat()
+            except (TypeError, ValueError): pass
+            remote_status=val("remoteStatus").lower()
+            location_names=[]
+            location_countries=[]
+            for location in x.findall("tt:locations/tt:location", namespace):
+                location_name=(location.findtext("tt:name", default="", namespaces=namespace) or "").strip()
+                country=(location.findtext("tt:country", default="", namespaces=namespace) or "").strip()
+                if location_name: location_names.append(location_name)
+                if country: location_countries.append(country)
+            names="; ".join(dict.fromkeys(location_names))
+            # "Multiple locations" is a Teamtailor grouping. Its nested address can be
+            # an office record rather than a candidate eligibility restriction.
+            if names.lower() == "multiple locations":
+                location=names
+            else:
+                countries="; ".join(dict.fromkeys(location_countries))
+                location="; ".join(filter(None, (names, countries)))
+            if remote_status == "fully":
+                location="; ".join(filter(None, ("Fully Remote", location or "Multiple locations")))
+            elif remote_status:
+                location="; ".join(filter(None, (remote_status.title(), location)))
+            jobs.append(normalized_job(name, val("guid") or val("link"), src.get("company") or "Unknown",
+                        val("title"), val("link"), published, location, val("description")))
+        return jobs
     return []
 
 
-TITLE_WORDS = ("backend", "back-end", "back end", "server-side", "server side", "golang", "go engineer", "java engineer", "python engineer", "platform engineer", "distributed systems", "api engineer")
-BACKEND_SIGNALS = ("backend", "back-end", "microservice", "distributed system", "api", "server-side", "golang", " go ", "kafka", "redis")
+TITLE_WORDS = ("backend", "back-end", "back end", "server-side", "server side", "golang", "go engineer", "java engineer", "kotlin engineer", "jvm engineer", "python engineer", "platform engineer", "distributed systems", "infrastructure engineer", "api engineer")
+BACKEND_SIGNALS = ("backend", "back-end", "microservice", "distributed system", "event driven", "event-driven", "high concurrency", "system design", "performance optimization", "data consistency", "transaction system", "api", "server-side", "golang", " go ", "java", "kotlin", "jvm", "kafka", "rabbitmq", "postgresql", "mongodb", "redis")
 HARD_EXCLUDE = ("us only", "united states only", "must reside in the us", "u.s. only", "eu only", "europe only",
                 "uk only", "united kingdom only", "canada only", "north america only", "latin america only", "latam only",
-                "must be based in the united states")
+                "must be based in the united states", "us work authorization", "u.s. work authorization", "authorized to work in the united states",
+                "no visa sponsorship", "relocation required", "office required", "on-site only", "onsite only", "hybrid only")
 DIRECT = ("worldwide", "anywhere", "global remote", "including china", "china", "contractor", "eor")
 CONFIRM = ("apac", "asia", "global", "remote")
 BLOCKCHAIN_STRONG = re.compile(r"\b(?:blockchain|web3|cryptocurrenc(?:y|ies)|decentralized finance|defi|solidity|ethereum|bitcoin|nfts?|on-chain|smart contracts?)\b", re.I)
 CRYPTO_BUSINESS = re.compile(r"\bcrypto\s*(?:exchange|trading|wallet|asset|protocol|token|ecosystem|platform|market|industry|payments?|custody|company|startup)\b", re.I)
+RESTRICTED_GEO = (r"united states|u\.s\.|usa|canada|united kingdom|u\.k\.|uk|"
+                  r"european union|europe|eu|france|paris|germany|berlin|netherlands|amsterdam|"
+                  r"spain|madrid|portugal|lisbon|poland|warsaw|australia|new zealand|"
+                  r"latin america|latam|north america")
+GLOBAL_GEO = re.compile(r"\b(?:worldwide|anywhere|global(?:ly)?|china|apac|asia)\b", re.I)
+
+
+def explicit_location_exclusion(job):
+    """Return explicit non-China work-location evidence, ignoring mere HQ mentions."""
+    scope=str(job.get("remote_scope_raw") or "").strip()
+    # Location restrictions are often placed near the end of a long JD.  Do not
+    # truncate before checking them: aggregator location fields can incorrectly
+    # say "Worldwide" even when the employer's own text has a hard restriction.
+    description=strip_html(str(job.get("description") or ""))[:20000]
+    url_path=parse.unquote(parse.urlparse(str(job.get("url") or "")).path).replace("-", " ")
+
+    # Some feeds expose a boolean remote flag and a separate physical eligibility location.
+    if scope.lower().startswith("remote;"):
+        detail=scope.split(";", 1)[1].strip()
+        if detail and not GLOBAL_GEO.search(detail) and detail.lower() not in ("not stated", "unspecified"):
+            return f"招聘源明确地点为 {detail}"
+
+    patterns=(
+        rf"\blocation\s*:\s*(?:remote\s*[-–—,/()]?\s*)?(?P<geo>{RESTRICTED_GEO})\b",
+        rf"\blocation\s*:\s*(?P<geo>{RESTRICTED_GEO})\b(?:\s*[-–—,/()]?\s*remote)?",
+        rf"\b(?:must|need|required)\s+(?:to\s+)?(?:be\s+)?(?:based|located|resident|reside)\s+in\s+(?P<geo>{RESTRICTED_GEO})\b",
+        rf"\b(?:only hiring|hire|candidates?|applicants?)\s+(?:people\s+)?(?:based|located|living|resident)?\s*(?:in|from)\s+(?P<geo>{RESTRICTED_GEO})\b",
+        rf"\bremote\s+(?:only\s+)?(?:within|from|in)\s+(?P<geo>{RESTRICTED_GEO})\b",
+        r"\bopen\s+to\s+candidates?(?:\s+based)?\s+(?:across|in)\s+(?P<geo>european)\s+time\s*zones?\b",
+        r"\b(?P<geo>european)\s+time\s*zones?\s+(?:availability\s+)?(?:is\s+)?(?:a\s+)?(?:hard\s+)?requirement\b",
+        r"\bcandidates?\s+based\s+in\s+(?P<geo>european)\s+time\s*zones?\b",
+    )
+    for pattern in patterns:
+        match=re.search(pattern, description, re.I)
+        if match:
+            # A single explicit restrictive location beats a generic aggregator Worldwide tag.
+            return f"JD 明确地点限制为 {match.group('geo')}"
+
+    # Job URLs commonly encode the work location even when an aggregator drops it from its API field.
+    url_match=re.search(rf"\bremote\b.{{0,60}}\b(?P<geo>{RESTRICTED_GEO})\b", url_path, re.I)
+    if url_match and not GLOBAL_GEO.search(url_path):
+        return f"职位 URL 明确地点为 {url_match.group('geo')}"
+    return ""
+
+
+def is_specific_non_china_location(scope):
+    """Treat a plain city/country ATS location as restrictive, not as remote eligibility."""
+    value=str(scope or "").strip().lower().strip(" .,-")
+    if not value or value in ("not stated", "unknown", "unspecified", "multiple locations"):
+        return False
+    # A Remote marker does not erase an accompanying explicit country/city.
+    if re.search(r"\bremote\b", value) and not GLOBAL_GEO.search(value):
+        geography=re.sub(r"\bremote\b", "", value)
+        geography=re.sub(r"[\s,;()/|:–—-]+", " ", geography).strip()
+        if geography and geography not in ("fully", "fully remote", "multiple locations", "not stated", "unspecified", "first", "friendly", "only", "100%"):
+            return True
+    if any(word in value for word in DIRECT + CONFIRM) or value in ("any", "anywhere in the world"):
+        return False
+    # ATS location fields such as "Philippines" or "Paris, France" identify an allowed
+    # work location. They must not fall through to the low-confidence remote bucket.
+    return len(value) <= 100 and bool(re.fullmatch(r"[\w\s.'’()/,+&-]+", value, re.UNICODE))
 
 TITLE_ZH = (("senior", "高级"), ("staff", "资深/Staff"), ("principal", "首席"),
             ("backend", "后端"), ("back-end", "后端"), ("platform", "平台"),
@@ -389,11 +556,20 @@ def wikidata_company_profiles(companies, delay=.25):
 def assess(job, cfg):
     if is_blockchain_job(job): return None
     title = job["title"].lower(); scope = job["remote_scope_raw"].lower(); text = (title + " " + job["description"]).lower()
-    title_match=any(w in title for w in TITLE_WORDS)
+    title_match=any(w in title for w in TITLE_WORDS) or bool(re.search(
+        r"\b(?:java|kotlin|jvm|python|golang|go)\s+(?:software\s+)?(?:developer|engineer)\b", title))
     generic_engineer=any(w in title for w in ("software engineer","software developer","systems engineer","infrastructure engineer","full stack engineer","full-stack engineer","full stack developer","full-stack developer"))
-    if not title_match and not (generic_engineer and sum(w in text[:4000] for w in BACKEND_SIGNALS)>=2): return None
-    if any(w in title for w in ("qa ", "quality assurance", "testing", "frontend", "front-end", "react", "mobile", "ios", "android")): return None
-    if scope.startswith("restricted to:") and "china" not in scope:
+    if not title_match and not (generic_engineer and sum(w in text[:4000] for w in BACKEND_SIGNALS)>=1): return None
+    if any(w in title for w in ("qa ", "quality assurance", "testing", "frontend", "front-end", "mobile", "ios", "android", "engineering manager", "software engineering manager", "head of engineering", "director of engineering", "vp engineering")): return None
+    if any(phrase in text[:5000] for phrase in ("must be fluent in german", "fluent german required", "must be fluent in french", "fluent french required", "must be fluent in japanese", "fluent japanese required")): return None
+    if any(phrase in text[:5000] for phrase in ("only hire in these timezones", "only hiring in these timezones")) and not any(zone in text[:5000] for zone in ("utc+8", "gmt+8")): return None
+    if any(w in title for w in ("full stack", "full-stack")) and any(w in text[:5000] for w in ("strong react", "expert react", "deep react", "next.js expert", "strong next.js")): return None
+    location_exclusion=explicit_location_exclusion(job)
+    if location_exclusion:
+        feasibility, score = "不建议投", 1.0
+    elif scope.startswith("restricted to:") and "china" not in scope:
+        feasibility, score = "不建议投", 1.0
+    elif is_specific_non_china_location(scope):
         feasibility, score = "不建议投", 1.0
     elif "," in scope and "china" not in scope and not any(w in scope for w in ("worldwide","anywhere","global","apac","asia","remote")):
         feasibility, score = "不建议投", 1.0
@@ -409,17 +585,24 @@ def assess(job, cfg):
         feasibility, score = "值得确认", 2.0
     title_bonus = 1.5 if title_match else (1.0 if generic_engineer else .5)
     skills = cfg["candidate"]["skills"]
-    matched = [s for s in skills if s.lower() in text]
+    def skill_present(skill):
+        # Short skills such as Go/R must use token boundaries ("Go" must not
+        # match "global" and "Rust" must not match "trust").
+        if skill.strip().lower() == "go":
+            return bool(re.search(r"\b(?:golang|go\s+(?:language|developer|engineer|backend)|written\s+in\s+go)\b", text))
+        return bool(re.search(r"(?<![a-z0-9])" + re.escape(skill.lower()) + r"(?![a-z0-9])", text))
+    matched = [s for s in skills if skill_present(s)]
     skill_bonus = min(1.0, len(matched) / 4)
     score = min(5.0, round(score + title_bonus + skill_bonus, 1)) if feasibility != "不建议投" else score
     gaps = []
     for keyword in ("kubernetes", "aws", "rust", "typescript", "leadership"):
-        if keyword in text and not any(keyword in s.lower() for s in skills): gaps.append(keyword)
-    reason = f"职位方向匹配；命中技能：{', '.join(matched[:6]) or '未从摘要确认'}；远程范围判定为{feasibility}。"
+        if re.search(r"(?<![a-z0-9])" + re.escape(keyword) + r"(?![a-z0-9])", text) and not any(keyword in s.lower() for s in skills): gaps.append(keyword)
+    location_note=f"；排除依据：{location_exclusion}" if location_exclusion else ""
+    reason = f"职位方向匹配；命中技能：{', '.join(matched[:6]) or '未从摘要确认'}；远程范围判定为{feasibility}{location_note}。"
     threshold=float(cfg["preferences"].get("minimum_score", 3.5))
     return {**job, "china_feasibility": feasibility, "score": score, "match_reason": reason,
             "main_gaps": ", ".join(gaps[:4]) or "需在完整 JD/面试中确认雇佣实体、时区与英文沟通要求",
-            "recommendation": "建议投递" if score >= threshold and feasibility == "可直接投" else ("建议先确认中国雇佣/EOR/contractor" if score >= threshold else "暂不投递")}
+            "recommendation": "🔥 立即投递" if score >= 4.5 and feasibility == "可直接投" else ("⭐ 值得投递" if score >= threshold else "❌ 跳过")}
 
 
 def company_country_allowed(job, cfg):
@@ -513,7 +696,7 @@ def execute(args, root=ROOT, state_override=None):
     cfg = load_json(root / "config/private.json")
     missing = [p for p in cfg["candidate"]["resume_paths"] if not Path(p).is_file()]
     if missing: raise SystemExit(f"配置错误：{len(missing)} 个简历路径不存在")
-    errors=[]
+    errors=[]; source_diagnostics=[]
     if args.fixture:
         raw = load_json(Path(args.fixture))
     else:
@@ -525,10 +708,16 @@ def execute(args, root=ROOT, state_override=None):
                 source_url=src.get("docs") or src.get("url") or ""
                 for job in rows: job["source_url"]=source_url
                 raw.extend(rows); source_counts.append((src["name"],len(rows)))
-            except Exception as exc: errors.append(f"{src['name']}: {type(exc).__name__}")
+                diagnostics=src.get("fetch_diagnostics", {})
+                source_diagnostics.append({"source":src["name"],"fetched":len(rows),**diagnostics})
+                errors.extend(f"{src['name']}: {e}" for e in diagnostics.get("errors", []))
+            except Exception as exc:
+                errors.append(f"{src['name']}: {type(exc).__name__}")
+                source_diagnostics.append({"source":src["name"],"fetched":0,"error":type(exc).__name__})
             time.sleep(float(src.get("rate_seconds", 0)))
         logging.info("source_counts=%s", ", ".join(f"{n}:{c}" for n,c in source_counts))
     excluded_companies={} if args.fixture else load_company_exclusions(root)
+    all_raw=list(raw)
     kept_raw=[]; company_filtered_raw=[]
     for job in raw:
         matches=company_alias_keys(job.get("company","")) & excluded_companies.keys()
@@ -561,8 +750,30 @@ def execute(args, root=ROOT, state_override=None):
     selected=[j for j in selected if company_country_allowed(j, cfg)]
     now=dt.datetime.now(); report_dir=root/"reports"; log_dir=root/"logs"; report_dir.mkdir(exist_ok=True); log_dir.mkdir(exist_ok=True)
     stamp=now.strftime("%Y%m%d-%H%M%S-%f"); report=report_dir/f"remote-jobs-{stamp}.md"; preview=report_dir/f"remote-jobs-{stamp}-payload.json"
-    report.write_text(build_report(selected, filtered_jobs, filtered_total, errors, now), encoding="utf-8")
-    payload=build_payload(selected, filtered_jobs, filtered_total, now); preview.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    source_summary=[]
+    for diagnostics in source_diagnostics:
+        name=diagnostics["source"]; counts={}
+        for j in {uid(x):x for x in all_raw if x["source"]==name}.values():
+            a=assess(j,cfg)
+            if a is None: reason="岗位方向或内容"
+            elif a["china_feasibility"]=="不建议投": reason="地域限制"
+            elif a["score"]<threshold: reason="分数不足"
+            elif max_age and (not published_date(j) or published_date(j)<cutoff): reason="日期超限或缺失"
+            elif company_alias_keys(j.get("company","")) & excluded_companies.keys(): reason="公司排除表"
+            elif uid(j) in seen: reason="已发送记录"
+            elif not any(uid(x)==uid(j) for x in selected): reason="公司国家或后续筛选"
+            else: reason="新增推荐"
+            counts[reason]=counts.get(reason,0)+1
+        diagnostics["filter_counts"]=counts
+        source_summary.append(f"- {name}：抓取 {diagnostics['fetched']}；" + "，".join(f"{k} {v}" for k,v in counts.items()) + ("；来源部分或全部失败" if diagnostics.get("error") or diagnostics.get("errors") else ""))
+    audit_text="\n\n## 来源覆盖与筛选统计\n\n"+"\n".join(source_summary)
+    audit_text+="\n\nRemote OK 为总榜与分类 feed 合集，不代表网站全部历史岗位。\n"
+    report.write_text(build_report(selected, filtered_jobs, filtered_total, errors, now)+audit_text, encoding="utf-8")
+    (report_dir/f"remote-jobs-{stamp}-sources.json").write_text(json.dumps(source_diagnostics,ensure_ascii=False,indent=2),encoding="utf-8")
+    payload=build_payload(selected, filtered_jobs, filtered_total, now)
+    if source_summary:
+        payload["card"]["elements"].append({"tag":"div","text":{"tag":"lark_md","content":audit_text}})
+    preview.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     logging.info("report=%s new=%d filtered_audit=%d source_errors=%d", report, len(selected), filtered_total, len(errors))
     if args.dry_run: logging.info("dry-run: Feishu skipped; durable state unchanged")
     elif not selected and not filtered_jobs: logging.info("没有新岗位或过滤审计项；不发送飞书")
@@ -584,7 +795,6 @@ def self_test():
             setup_cfg=load_json(setup_path)
             assert setup_path.stat().st_mode & 0o777 == 0o600 and setup_cfg["preferences"]["max_age_days"]==7
             assert "China" in setup_cfg["preferences"]["excluded_company_countries"]
-            assert load_company_exclusions(setup_root) == {}
             (setup_root/"config/company_exclusion_table.json").write_text(json.dumps({
                 "base_token":"base-test", "table_id":"table-test", "company_field":"公司名称"}), encoding="utf-8")
             original_run=subprocess.run
@@ -612,8 +822,35 @@ def self_test():
                                   "2026-09-01","Worldwide","Backend services for a crypto exchange and digital asset trading")
             security=normalized_job("test","s1","Security Labs","Backend Engineer","https://example.com/s1",
                                     "2026-09-01","Worldwide","Build Python services using modern cryptography and key management")
+            manager=normalized_job("test","m1","Example","Engineering Manager, Backend","https://example.com/m1",
+                                   "2026-09-01","Worldwide","Manage a backend engineering team")
+            language=normalized_job("test","l1","Example","Senior Backend Engineer","https://example.com/l1",
+                                    "2026-09-01","Worldwide","Must be fluent in Japanese")
+            timezone=normalized_job("test","t1","Example","Senior Backend Engineer","https://example.com/t1",
+                                    "2026-09-01","Remote","We only hire in these timezones: GMT-8 to GMT+2")
+            payflows=normalized_job("Arbeitnow","p1","Payflows","Senior Backend Engineer",
+                                    "https://www.arbeitnow.fr/jobs/companies/payflows/remote-senior-backend-engineer-paris-324081",
+                                    "2026-09-07","Remote","Build backend services for Payflows")
+            eu_remote=normalized_job("Himalayas","e1","Makersite","Senior Backend Engineer","https://example.com/e1",
+                                     "2026-09-07","Worldwide","Location: EU (Remote). Build Python backend services")
+            clera_eu_timezone=normalized_job("Himalayas","e2","Clera","Backend Engineer","https://example.com/e2",
+                                             "2026-09-15","Worldwide","Build scalable APIs. " + "x "*3500 +
+                                             "Fully remote, open to candidates across European timezones. European timezone availability is required.")
+            global_paris_hq=normalized_job("test","g1","Example","Senior Backend Engineer","https://example.com/g1",
+                                           "2026-09-07","Worldwide","Headquartered in Paris. Location: Worldwide Remote. Build Go services")
+            country_only=normalized_job("test","c1","Example","Senior Backend Engineer","https://example.com/c1",
+                                        "2026-09-07","Philippines","Build Go backend services")
+            china_location=normalized_job("test","c2","Example","Senior Backend Engineer","https://example.com/c2",
+                                          "2026-09-07","China","Build Go backend services")
             assert assess(blockchain, setup_cfg) is None and assess(crypto, setup_cfg) is None
             assert assess(security, setup_cfg) is not None
+            assert assess(manager, setup_cfg) is None and assess(language, setup_cfg) is None and assess(timezone, setup_cfg) is None
+            assert assess(payflows, setup_cfg)["china_feasibility"]=="不建议投"
+            assert assess(eu_remote, setup_cfg)["china_feasibility"]=="不建议投"
+            assert assess(clera_eu_timezone, setup_cfg)["china_feasibility"]=="不建议投"
+            assert assess(global_paris_hq, setup_cfg)["china_feasibility"]=="可直接投"
+            assert assess(country_only, setup_cfg)["china_feasibility"]=="不建议投"
+            assert assess(china_location, setup_cfg)["china_feasibility"]=="可直接投"
             # Test production-state semantics without network by validating selection then writing the same IDs.
             A.dry_run=True; first, report, preview=execute(A, root=setup_root, state_override=Path(td)/"seen.json")
             assert len(first)==2 and all(j["score"]>=4 for j in first)

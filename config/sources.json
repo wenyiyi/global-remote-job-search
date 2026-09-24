@@ -1,19 +1,675 @@
-{"sources":[
-  {"name":"Remotive","kind":"remotive","url":"https://remotive.com/api/remote-jobs","docs":"https://github.com/remotive-io/remote-jobs-api","enabled":true,"access":"documented public API; official guidance says max 4 fetches/day and blocks >2/min","filters":"search=backend; software-dev category","rate_seconds":2},
-  {"name":"Arbeitnow","kind":"arbeitnow","url":"https://www.arbeitnow.com/api/job-board-api","docs":"https://www.arbeitnow.com/blog/job-board-api","enabled":true,"access":"official free public API; no key","filters":"API remote=true plus local title/location filtering","rate_seconds":2},
-  {"name":"Himalayas","kind":"himalayas","url":"https://himalayas.app/jobs/api/search","docs":"https://himalayas.app/api","enabled":true,"access":"official free public JSON API; no auth; attribution retained in source/link","filters":"recent backend and software-engineering queries followed by strict local filtering","queries":["backend engineer","golang backend","python backend","java backend","platform engineer","distributed systems","software engineer","software developer","server engineer","infrastructure engineer"],"pages":5,"query_delay_seconds":1,"rate_seconds":2},
-  {"name":"Jobicy","kind":"jobicy","url":"https://jobicy.com/api/v2/remote-jobs","docs":"https://jobicy.com/jobs-rss-feed","enabled":true,"access":"official public REST API; no auth; poll no more than hourly","filters":"latest engineering jobs; local filtering","count":200,"rate_seconds":2},
-  {"name":"Remote OK","kind":"remoteok","url":"https://remoteok.com/api","docs":"https://remoteok.com/","enabled":true,"access":"official public JSON API; attribution and canonical links retained","filters":"latest remote jobs; local backend/title/location filtering","rate_seconds":2},
-  {"name":"We Work Remotely","kind":"wwr_rss","url":"https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss","docs":"https://weworkremotely.com/remote-job-rss-feed","enabled":true,"access":"official public RSS; attribution link retained","filters":"back-end, full-stack, programming and devops/sysadmin feeds","feeds":["https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss","https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss","https://weworkremotely.com/categories/remote-programming-jobs.rss","https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss"],"query_delay_seconds":1,"rate_seconds":2},
-  {"name":"Greenhouse example","kind":"greenhouse","board_token":"REPLACE_ME","docs":"https://developers.greenhouse.io/job-board.html","enabled":false,"access":"official public Job Board GET API; no auth","filters":"configure one known company board token; local filtering","rate_seconds":2},
-  {"name":"Workable example","kind":"workable","account_subdomain":"REPLACE_ME","company":"REPLACE_ME","docs":"https://help.workable.com/hc/en-us/articles/115012771647-Using-the-Workable-API-to-create-a-careers-page","enabled":false,"access":"official public endpoint for published jobs","filters":"configure one known company account subdomain; local filtering","rate_seconds":2},
-  {"name":"Lever example","kind":"lever","site":"REPLACE_ME","docs":"https://github.com/lever/postings-api","enabled":false,"access":"official public postings GET API; published jobs only","filters":"configure company site; local filtering","rate_seconds":2},
-  {"name":"Ashby example","kind":"ashby","board":"REPLACE_ME","docs":"https://developers.ashbyhq.com/docs/public-job-posting-api","enabled":false,"access":"official public job postings GET API","filters":"configure company board; local filtering","rate_seconds":2},
-  {"name":"LinkedIn","kind":"manual","url":"https://www.linkedin.com/","docs":"https://www.linkedin.com/legal/user-agreement","enabled":false,"access":"manual only; terms prohibit scraping and unauthorized automation","filters":"verify leads on the company ATS","rate_seconds":0},
-  {"name":"Y Combinator","kind":"manual","url":"https://www.ycombinator.com/jobs","docs":"https://www.ycombinator.com/legal/#tou","enabled":false,"access":"manual only; no documented public jobs API and terms restrict scraping","filters":"remote backend roles; verify location on company ATS","rate_seconds":0},
-  {"name":"Glassdoor","kind":"manual","url":"https://www.glassdoor.com/Job","docs":"https://www.glassdoor.com/about/terms.htm","enabled":false,"access":"manual only; automated extraction requires express permission","filters":"verify leads on the company ATS","rate_seconds":0},
-  {"name":"FlexJobs","kind":"manual","url":"https://www.flexjobs.com/","docs":"https://www.flexjobs.com/termsofuse.aspx","enabled":false,"access":"manual only; terms prohibit automated downloading and scraping","filters":"manual search only","rate_seconds":0},
-  {"name":"Remote.com","kind":"manual","url":"https://remote.com/jobs","docs":"https://remote.com/policy/terms-of-service","enabled":false,"access":"manual until a documented public jobs API or RSS feed is available","filters":"Anywhere or China-compatible backend roles","rate_seconds":0},
-  {"name":"Wellfound","kind":"manual","url":"https://wellfound.com/remote","docs":"https://wellfound.com/terms","enabled":false,"access":"manual only; terms restrict automated collection and third-party use","filters":"global remote backend roles; verify location on company ATS","rate_seconds":0},
-  {"name":"Jobgether","kind":"manual","url":"https://jobgether.com/remote-jobs/anywhere","enabled":false,"access":"manual until a documented public jobs API or RSS feed is available","filters":"Anywhere backend roles; verify original company posting","rate_seconds":0}
-]}
+{
+  "sources": [
+    {
+      "name": "Social Discovery Group Careers",
+      "company": "Social Discovery Group",
+      "kind": "official_jobposting",
+      "url": "https://socialdiscoverygroup.com/vacancies",
+      "docs": "https://socialdiscoverygroup.com/robots.txt",
+      "enabled": true,
+      "access": "public official careers page with embedded schema.org JobPosting JSON-LD; no login; robots permits /vacancies; one page per run",
+      "filters": "all published jobs; existing backend, freshness, Web3, company exclusion and China-remote rules apply; unknown dates remain unknown",
+      "rate_seconds": 5
+    },
+    {
+      "name": "Sumsub Careers",
+      "company": "Sumsub",
+      "kind": "teamtailor_rss",
+      "url": "https://careers.sumsub.com/jobs.rss?per_page=200",
+      "docs": "https://support.teamtailor.com/en/articles/11171756-rss-feed-how-to-guide",
+      "enabled": true,
+      "access": "official public Teamtailor RSS feed; no login or API key; one request per run",
+      "filters": "all published jobs; strict backend, freshness, Web3/crypto-role and China-remote filtering; Fully Remote plus Multiple locations remains worth confirming unless China is explicit",
+      "rate_seconds": 5
+    },
+    {
+      "name": "Awesome Remote Job discovery catalog",
+      "kind": "manual",
+      "url": "https://github.com/lukasz-madon/awesome-remote-job",
+      "docs": "https://github.com/lukasz-madon/awesome-remote-job/blob/master/CONTRIBUTING.md",
+      "enabled": false,
+      "access": "manual curated-directory review only; not a live job feed and not final evidence",
+      "filters": "discover backend-oriented boards, aggregators and remote-first companies; require independent access-policy review plus live official Careers/ATS and China-remote verification before recommendation",
+      "rate_seconds": 0
+    },
+    {
+      "name": "WAHJobQueen",
+      "kind": "manual",
+      "url": "https://www.wahjobqueen.com/home/",
+      "enabled": false,
+      "access": "manual public-blog discovery only; publisher states leads are found online and may not be thoroughly researched",
+      "filters": "low-priority company leads only; skip surveys/side hustles/non-engineering posts and verify a live official employer Careers/ATS posting plus China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Paybump",
+      "kind": "manual",
+      "url": "https://www.paybump.com/",
+      "docs": "https://www.paybump.com/pricing",
+      "enabled": false,
+      "access": "manual paid career platform; remote job leads require membership and no documented public jobs feed is configured",
+      "filters": "do not automate, subscribe or access member-only listings; user-supplied public leads still require official employer verification",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Jobright",
+      "kind": "manual",
+      "url": "https://jobright.ai/",
+      "enabled": false,
+      "access": "manual account-based AI job-search platform; do not sign in, upload a resume, use autofill, contact insiders or auto-apply",
+      "filters": "US-oriented discovery leads only; verify original employer ATS and reject geography that excludes China",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Apres",
+      "kind": "manual",
+      "url": "https://apresgroup.com/",
+      "docs": "https://apresgroup.com/featured-jobs-apres/",
+      "enabled": false,
+      "access": "manual return-to-work platform; some job-board access is paid and no documented public feed is configured",
+      "filters": "low-priority flexible-work leads; verify role relevance, live official employer posting and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Remotive",
+      "kind": "remotive",
+      "url": "https://remotive.com/api/remote-jobs",
+      "docs": "https://github.com/remotive-io/remote-jobs-api",
+      "enabled": true,
+      "access": "documented public API; official guidance says max 4 fetches/day and blocks >2/min",
+      "filters": "search=backend; software-dev category",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Arbeitnow",
+      "kind": "arbeitnow",
+      "url": "https://www.arbeitnow.com/api/job-board-api",
+      "docs": "https://www.arbeitnow.com/blog/job-board-api",
+      "enabled": true,
+      "access": "official free public API; no key",
+      "filters": "API remote=true plus local title/location filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Himalayas",
+      "kind": "himalayas",
+      "url": "https://himalayas.app/jobs/api/search",
+      "docs": "https://himalayas.app/api",
+      "enabled": true,
+      "access": "official free public JSON API; no auth; attribution retained in source/link",
+      "filters": "recent backend and software-engineering queries followed by strict local filtering",
+      "queries": [
+        "senior backend engineer",
+        "senior software engineer backend",
+        "golang backend",
+        "go engineer",
+        "java backend",
+        "kotlin backend",
+        "jvm engineer",
+        "platform engineer",
+        "distributed systems engineer",
+        "infrastructure engineer",
+        "microservices kafka",
+        "event driven architecture",
+        "payment backend",
+        "billing platform",
+        "saas backend",
+        "ai infrastructure"
+      ],
+      "pages": 4,
+      "query_delay_seconds": 1,
+      "rate_seconds": 2
+    },
+    {
+      "name": "Jobicy",
+      "kind": "jobicy",
+      "url": "https://jobicy.com/api/v2/remote-jobs",
+      "docs": "https://jobicy.com/jobs-rss-feed",
+      "enabled": true,
+      "access": "official public REST API; no auth; poll no more than hourly",
+      "filters": "latest engineering jobs; local filtering",
+      "count": 200,
+      "rate_seconds": 2
+    },
+    {
+      "name": "Remote OK",
+      "kind": "remoteok",
+      "url": "https://remoteok.com/api",
+      "docs": "https://remoteok.com/",
+      "enabled": true,
+      "access": "official public JSON API; attribution and canonical links retained",
+      "filters": "latest overall + Java/backend/Golang/Python/Kotlin/engineer category feeds, dedup by job ID; no verified historical pagination",
+      "rate_seconds": 2,
+      "feeds": [
+        "https://remoteok.com/remote-java-jobs.json",
+        "https://remoteok.com/remote-backend-jobs.json",
+        "https://remoteok.com/remote-golang-jobs.json",
+        "https://remoteok.com/remote-python-jobs.json",
+        "https://remoteok.com/remote-kotlin-jobs.json",
+        "https://remoteok.com/remote-engineer-jobs.json"
+      ],
+      "query_delay_seconds": 2
+    },
+    {
+      "name": "We Work Remotely",
+      "kind": "wwr_rss",
+      "url": "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss",
+      "docs": "https://weworkremotely.com/remote-job-rss-feed",
+      "enabled": true,
+      "access": "official public RSS; attribution link retained",
+      "filters": "back-end, full-stack, programming and devops/sysadmin feeds",
+      "feeds": [
+        "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss"
+      ],
+      "query_delay_seconds": 1,
+      "rate_seconds": 2
+    },
+    {
+      "name": "Greenhouse example",
+      "kind": "greenhouse",
+      "board_token": "REPLACE_ME",
+      "docs": "https://developers.greenhouse.io/job-board.html",
+      "enabled": false,
+      "access": "official public Job Board GET API; no auth",
+      "filters": "configure one known company board token; local filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Workable example",
+      "kind": "workable",
+      "account_subdomain": "REPLACE_ME",
+      "company": "REPLACE_ME",
+      "docs": "https://help.workable.com/hc/en-us/articles/115012771647-Using-the-Workable-API-to-create-a-careers-page",
+      "enabled": false,
+      "access": "official public endpoint for published jobs",
+      "filters": "configure one known company account subdomain; local filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Lever example",
+      "kind": "lever",
+      "site": "REPLACE_ME",
+      "docs": "https://github.com/lever/postings-api",
+      "enabled": false,
+      "access": "official public postings GET API; published jobs only",
+      "filters": "configure company site; local filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Ashby example",
+      "kind": "ashby",
+      "board": "REPLACE_ME",
+      "docs": "https://developers.ashbyhq.com/docs/public-job-posting-api",
+      "enabled": false,
+      "access": "official public job postings GET API",
+      "filters": "configure company board; local filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Camunda Careers",
+      "company": "Camunda",
+      "kind": "ashby",
+      "board": "camunda",
+      "docs": "https://jobs.ashbyhq.com/camunda",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict local role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "ElevenLabs Careers",
+      "company": "ElevenLabs",
+      "kind": "ashby",
+      "board": "elevenlabs",
+      "docs": "https://jobs.ashbyhq.com/elevenlabs",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict local role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Supabase Careers",
+      "company": "Supabase",
+      "kind": "ashby",
+      "board": "supabase",
+      "docs": "https://jobs.ashbyhq.com/supabase",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict local role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "DuckDuckGo Careers",
+      "company": "DuckDuckGo",
+      "kind": "ashby",
+      "board": "duck-duck-go",
+      "docs": "https://jobs.ashbyhq.com/duck-duck-go",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict local role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Canonical Careers",
+      "company": "Canonical",
+      "kind": "greenhouse",
+      "board_token": "canonical",
+      "docs": "https://canonical.com/careers",
+      "enabled": true,
+      "access": "official public Greenhouse Job Board API",
+      "filters": "all published jobs; strict local role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "PostHog Careers",
+      "company": "PostHog",
+      "kind": "ashby",
+      "board": "posthog",
+      "docs": "https://jobs.ashbyhq.com/posthog",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict timezone, role, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Help Scout Careers",
+      "company": "Help Scout",
+      "kind": "ashby",
+      "board": "helpscout",
+      "docs": "https://jobs.ashbyhq.com/helpscout",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict role, freshness, Web3 and China-remote filtering; reject explicit US/Canada-only roles",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Kit Careers",
+      "company": "Kit",
+      "kind": "ashby",
+      "board": "kit",
+      "docs": "https://jobs.ashbyhq.com/kit",
+      "enabled": true,
+      "access": "official public Ashby job board API",
+      "filters": "all published jobs; strict backend focus, freshness, Web3 and China-remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "ActAI Careers",
+      "company": "ActAI",
+      "kind": "ashby",
+      "board": "bjakcareer",
+      "docs": "https://actai.company/careers",
+      "enabled": true,
+      "access": "official Careers page links to the public Ashby job board API",
+      "filters": "all published jobs; accept China/APAC/Asia/global locations only; strict backend focus, freshness, Web3 and remote filtering",
+      "rate_seconds": 2
+    },
+    {
+      "name": "Toggl Careers",
+      "company": "Toggl",
+      "kind": "manual",
+      "url": "https://jobs.ashbyhq.com/toggl",
+      "docs": "https://jobs.ashbyhq.com/toggl",
+      "enabled": false,
+      "access": "official public job page; the documented Ashby posting API returned 404, so automated monitoring is disabled until a stable public endpoint is verified",
+      "filters": "manual lead verification; reject roles limited to UTC-4 through UTC+4 for a China-based candidate",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Working Nomads",
+      "kind": "manual",
+      "url": "https://www.workingnomads.com/remote-development-jobs",
+      "enabled": false,
+      "access": "manual until a documented public feed and automation permission are verified",
+      "filters": "backend and software engineering; verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Real Work From Anywhere",
+      "kind": "manual",
+      "url": "https://www.realworkfromanywhere.com",
+      "enabled": false,
+      "access": "discovered through Awesome Remote Job; manual until a documented permitted feed is independently verified",
+      "filters": "location-independent backend leads; verify live original employer posting and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Remote Backend Jobs",
+      "kind": "manual",
+      "url": "https://remotebackendjobs.com",
+      "enabled": false,
+      "access": "discovered through Awesome Remote Job; aggregator, manual until a documented permitted feed is independently verified",
+      "filters": "backend leads only; verify live original employer posting and full location policy",
+      "rate_seconds": 0
+    },
+    {
+      "name": "JobsCollider",
+      "kind": "manual",
+      "url": "https://jobscollider.com",
+      "enabled": false,
+      "access": "discovered through Awesome Remote Job; aggregator, manual until a documented permitted feed is independently verified",
+      "filters": "backend/platform/infrastructure leads; verify live original employer posting and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "AI Dev Jobs",
+      "kind": "manual",
+      "url": "https://aidevjobs.com",
+      "enabled": false,
+      "access": "discovered through Awesome Remote Job; repository claims a public REST API and MCP, but official documentation and usage terms must be verified before automation",
+      "filters": "backend and AI-infrastructure leads; reject frontend-only roles and verify live original employer posting plus China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Golangprojects",
+      "kind": "manual",
+      "url": "https://www.golangprojects.com",
+      "enabled": false,
+      "access": "discovered through Awesome Remote Job; manual until a documented permitted API or feed is independently verified",
+      "filters": "Go backend leads; verify live original employer posting and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Arc",
+      "kind": "manual",
+      "url": "https://arc.dev/remote-jobs",
+      "enabled": false,
+      "access": "manual; sign-in marketplace and no documented public jobs API for this workflow",
+      "filters": "verify original employer and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Turing",
+      "kind": "manual",
+      "url": "https://www.turing.com/jobs",
+      "enabled": false,
+      "access": "manual; account-based talent platform",
+      "filters": "verify engagement and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Built In Remote",
+      "kind": "manual",
+      "url": "https://builtin.com/jobs/remote",
+      "enabled": false,
+      "access": "manual until automation terms and a documented public feed are verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Remote.co",
+      "kind": "manual",
+      "url": "https://remote.co/remote-jobs/developer",
+      "enabled": false,
+      "access": "manual until a documented public jobs API or RSS feed is verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "JustRemote",
+      "kind": "manual",
+      "url": "https://justremote.co/remote-developer-jobs",
+      "enabled": false,
+      "access": "manual until automation permission and a documented feed are verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Virtual Vocations",
+      "kind": "manual",
+      "url": "https://www.virtualvocations.com",
+      "enabled": false,
+      "access": "manual; account-based service",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Dynamite Jobs",
+      "kind": "manual",
+      "url": "https://dynamitejobs.com",
+      "enabled": false,
+      "access": "manual until a documented public feed and automation permission are verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Hacker News Who Is Hiring",
+      "kind": "manual",
+      "url": "https://news.ycombinator.com/submitted?id=whoishiring",
+      "enabled": false,
+      "access": "manual until a stable permitted ingestion method is implemented",
+      "filters": "monthly thread; verify employer careers page and location wording",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Welcome to the Jungle",
+      "kind": "manual",
+      "url": "https://www.welcometothejungle.com/en/jobs",
+      "enabled": false,
+      "access": "manual until a documented public feed and automation permission are verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Levels.fyi Jobs",
+      "kind": "manual",
+      "url": "https://www.levels.fyi/jobs",
+      "enabled": false,
+      "access": "manual until a documented public jobs API and automation permission are verified",
+      "filters": "verify original company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Indeed",
+      "kind": "manual",
+      "url": "https://www.indeed.com",
+      "enabled": false,
+      "access": "Discovery via public search evidence and user-provided links; no direct automated Indeed scraping or partner API configured",
+      "filters": "Resolve named employers to verified official Careers/ATS sources; see discovery_catalogs.json Indeed entry",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Xiaohongshu remote-work leads",
+      "kind": "manual",
+      "url": "https://www.xiaohongshu.com",
+      "docs": "https://openaccount.xiaohongshu.com/docs/scope",
+      "enabled": false,
+      "access": "manual public-post discovery only; the official Open Platform currently has no general note-search/read scope for this workflow",
+      "filters": "extract company and role as a lead, then require a live official employer careers/ATS posting and normal China-remote validation",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Glints",
+      "kind": "manual",
+      "url": "https://glints.com/opportunities/jobs/explore",
+      "enabled": false,
+      "access": "manual discovery; applications may require account/app chat and there is no documented public search API configured",
+      "filters": "backend leads only; verify the vacancy on the official employer careers page and reject country-limited or hybrid roles",
+      "rate_seconds": 0
+    },
+    {
+      "name": "PowerToFly",
+      "kind": "manual",
+      "url": "https://powertofly.com/jobs",
+      "enabled": false,
+      "access": "manual discovery until a documented public jobs feed and automation permission are verified",
+      "filters": "verify original employer ATS and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Fairygodboss",
+      "kind": "manual",
+      "url": "https://fairygodboss.com/jobs",
+      "enabled": false,
+      "access": "manual discovery until a documented public jobs feed and automation permission are verified",
+      "filters": "verify original employer ATS and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "InHerSight",
+      "kind": "manual",
+      "url": "https://www.inhersight.com/jobs",
+      "enabled": false,
+      "access": "manual discovery until a documented public jobs feed and automation permission are verified",
+      "filters": "verify original employer ATS and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Workew",
+      "kind": "manual",
+      "url": "https://workew.com",
+      "enabled": false,
+      "access": "manual discovery until an official documented feed and automation permission are verified",
+      "filters": "verify original employer ATS and China eligibility",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Upwork",
+      "kind": "manual",
+      "url": "https://www.upwork.com",
+      "enabled": false,
+      "access": "manual freelance marketplace; never log in, bid, message, or scrape",
+      "filters": "lower priority than full-time official employer roles",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Freelancer.com",
+      "kind": "manual",
+      "url": "https://www.freelancer.com",
+      "enabled": false,
+      "access": "manual freelance marketplace; never log in, bid, message, or scrape",
+      "filters": "lower priority than full-time official employer roles",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Fiverr",
+      "kind": "manual",
+      "url": "https://www.fiverr.com",
+      "enabled": false,
+      "access": "manual freelance marketplace; never log in, bid, message, or scrape",
+      "filters": "lower priority than full-time official employer roles",
+      "rate_seconds": 0
+    },
+    {
+      "name": "LinkedIn",
+      "kind": "manual",
+      "url": "https://www.linkedin.com/",
+      "docs": "https://www.linkedin.com/legal/user-agreement",
+      "enabled": false,
+      "access": "manual only; terms prohibit scraping and unauthorized automation",
+      "filters": "verify leads on the company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Y Combinator",
+      "kind": "manual",
+      "url": "https://www.ycombinator.com/jobs",
+      "docs": "https://www.ycombinator.com/legal/#tou",
+      "enabled": false,
+      "access": "manual only; no documented public jobs API and terms restrict scraping",
+      "filters": "remote backend roles; verify location on company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Glassdoor",
+      "kind": "manual",
+      "url": "https://www.glassdoor.com/Job",
+      "docs": "https://www.glassdoor.com/about/terms.htm",
+      "enabled": false,
+      "access": "manual only; automated extraction requires express permission",
+      "filters": "verify leads on the company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "FlexJobs",
+      "kind": "manual",
+      "url": "https://www.flexjobs.com/",
+      "docs": "https://www.flexjobs.com/termsofuse.aspx",
+      "enabled": false,
+      "access": "manual only; terms prohibit automated downloading and scraping",
+      "filters": "manual search only",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Remote.com",
+      "kind": "manual",
+      "url": "https://remote.com/jobs",
+      "docs": "https://remote.com/policy/terms-of-service",
+      "enabled": false,
+      "access": "manual until a documented public jobs API or RSS feed is available",
+      "filters": "Anywhere or China-compatible backend roles",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Wellfound",
+      "kind": "manual",
+      "url": "https://wellfound.com/remote",
+      "docs": "https://wellfound.com/terms",
+      "enabled": false,
+      "access": "manual only; terms restrict automated collection and third-party use",
+      "filters": "global remote backend roles; verify location on company ATS",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Jobgether",
+      "kind": "manual",
+      "url": "https://jobgether.com/remote-jobs/anywhere",
+      "enabled": false,
+      "access": "manual until a documented public jobs API or RSS feed is available",
+      "filters": "Anywhere backend roles; verify original company posting",
+      "rate_seconds": 0
+    },
+    {
+      "name": "Automattic Careers",
+      "company": "Automattic",
+      "kind": "greenhouse",
+      "board_token": "automatticcareers",
+      "docs": "https://automattic.com/work-with-us/",
+      "discovery_url": "https://www.indeed.com/cmp/Automattic/salaries/Software-Engineer",
+      "enabled": true,
+      "access": "Official public Greenhouse Job Board API; no credentials; Indeed is discovery provenance only",
+      "filters": "Full official JD; backend, freshness, China remote eligibility and company exclusions; Remote alone is not worldwide",
+      "rate_seconds": 2,
+      "discovery_source": "Indeed"
+    },
+    {
+      "name": "GitLab Careers",
+      "company": "GitLab",
+      "kind": "greenhouse",
+      "board_token": "gitlab",
+      "docs": "https://about.gitlab.com/jobs/",
+      "discovery_url": "https://www.indeed.com/viewjob?jk=6beb3dd9c26c0356",
+      "enabled": true,
+      "access": "Official public Greenhouse Job Board API; no credentials; Indeed is discovery provenance only",
+      "filters": "Full official JD; backend, freshness, China remote eligibility and company exclusions; Remote alone is not worldwide",
+      "rate_seconds": 2,
+      "discovery_source": "Indeed"
+    },
+    {
+      "name": "Grafana Labs Careers",
+      "company": "Grafana Labs",
+      "kind": "greenhouse",
+      "board_token": "grafanalabs",
+      "docs": "https://grafana.com/about/careers/",
+      "discovery_url": "https://www.indeed.com/cmp/Grafana-Labs-1/jobs",
+      "enabled": true,
+      "access": "Official public Greenhouse Job Board API; no credentials; Indeed is discovery provenance only",
+      "filters": "Full official JD; backend, freshness, China remote eligibility and company exclusions; Remote alone is not worldwide",
+      "rate_seconds": 2,
+      "discovery_source": "Indeed"
+    },
+    {
+      "name": "Indeed China",
+      "kind": "manual",
+      "url": "https://cn.indeed.com/",
+      "docs": "https://cn.indeed.com/legal",
+      "enabled": false,
+      "access": "Public search/user-provided lead discovery only; direct automation not enabled: no verified public API or crawler permission",
+      "filters": "Chinese and English Java/Kotlin/Go/backend remote leads; verify original employer ATS and distinguish hybrid/on-site from fully remote",
+      "rate_seconds": 0
+    }
+  ]
+}

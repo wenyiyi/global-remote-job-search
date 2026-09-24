@@ -8,3 +8,14 @@ logs/
 __pycache__/
 *.pyc
 .DS_Store
+config/company_watchlist.json
+.env.*
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+*.bak
+*.before*
+resumes/
+attachments/

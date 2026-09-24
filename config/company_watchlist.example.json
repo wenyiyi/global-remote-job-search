@@ -1,0 +1,12 @@
+{
+  "provenance": "Private local discovery notes; do not publish a populated watchlist.",
+  "active": [],
+  "excluded": {
+    "reason": "Out of configured scope",
+    "companies": []
+  },
+  "manual_review": {
+    "reason": "Official employer identity and permitted feed require verification",
+    "companies": []
+  }
+}

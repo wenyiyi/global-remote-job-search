@@ -1,0 +1,156 @@
+{
+  "catalogs": [
+    {
+      "name": "Awesome Remote Job",
+      "url": "https://github.com/lukasz-madon/awesome-remote-job",
+      "type": "curated_remote_work_directory",
+      "mode": "manual_discovery_only",
+      "source_of_record": false,
+      "review_sections": [
+        "Job boards",
+        "Job boards aggregators",
+        "Companies with remote DNA"
+      ],
+      "ignore_sections": [
+        "Articles & Posts",
+        "Housing",
+        "Communities",
+        "Tools"
+      ],
+      "verification_rule": "A lead must resolve to a live official employer Careers/ATS posting and pass the full China-remote eligibility check before recommendation.",
+      "discovered_on": "2026-09-16",
+      "candidate_sources": [
+        {
+          "name": "Real Work From Anywhere",
+          "url": "https://www.realworkfromanywhere.com",
+          "priority": "high",
+          "focus": "location-independent roles",
+          "status": "manual_review"
+        },
+        {
+          "name": "Remote Backend Jobs",
+          "url": "https://remotebackendjobs.com",
+          "priority": "high",
+          "focus": "backend-only aggregation",
+          "status": "manual_review"
+        },
+        {
+          "name": "JobsCollider",
+          "url": "https://jobscollider.com",
+          "priority": "medium",
+          "focus": "large remote-job aggregation",
+          "status": "manual_review"
+        },
+        {
+          "name": "AI Dev Jobs",
+          "url": "https://aidevjobs.com",
+          "priority": "high",
+          "focus": "AI and engineering; claimed public REST API and MCP require verification",
+          "status": "manual_review"
+        },
+        {
+          "name": "Golangprojects",
+          "url": "https://www.golangprojects.com",
+          "priority": "high",
+          "focus": "Go engineering roles",
+          "status": "manual_review"
+        },
+        {
+          "name": "WAHJobQueen",
+          "url": "https://www.wahjobqueen.com/home/",
+          "priority": "low",
+          "focus": "work-from-home blog; mostly non-engineering and US-oriented leads",
+          "status": "manual_review"
+        },
+        {
+          "name": "Paybump",
+          "url": "https://www.paybump.com/",
+          "priority": "low",
+          "focus": "paid career resources and member-only remote job leads",
+          "status": "manual_review"
+        },
+        {
+          "name": "Jobright",
+          "url": "https://jobright.ai/",
+          "priority": "medium",
+          "focus": "account-based AI job matching; predominantly United States market",
+          "status": "manual_review"
+        },
+        {
+          "name": "Apres",
+          "url": "https://apresgroup.com/",
+          "priority": "low",
+          "focus": "women returning to work, flexible roles and returnships; partly paid",
+          "status": "manual_review"
+        }
+      ],
+      "excluded_categories": [
+        "Crypto",
+        "Web3",
+        "Blockchain",
+        "Testing-only",
+        "Frontend-only",
+        "country-restricted sources that exclude China"
+      ]
+    },
+    {
+      "name": "Indeed",
+      "url": "https://www.indeed.com/",
+      "type": "job_board_discovery",
+      "mode": "manual_discovery_only",
+      "source_of_record": false,
+      "reviewed_on": "2026-09-24",
+      "verification_rule": "Only official employer ATS postings are ingested automatically; never treat Indeed search location Worldwide as eligibility evidence. No direct Indeed feed has been enabled.",
+      "queries": [
+        "site:indeed.com backend Java remote worldwide",
+        "site:indeed.com software engineer Golang remote"
+      ],
+      "verified_employers": [
+        {
+          "company": "Automattic",
+          "discovery_url": "https://www.indeed.com/cmp/Automattic/salaries/Software-Engineer",
+          "official_careers": "https://automattic.com/work-with-us/",
+          "source_name": "Automattic Careers"
+        },
+        {
+          "company": "GitLab",
+          "discovery_url": "https://www.indeed.com/viewjob?jk=6beb3dd9c26c0356",
+          "official_careers": "https://about.gitlab.com/jobs/",
+          "source_name": "GitLab Careers"
+        },
+        {
+          "company": "Grafana Labs",
+          "discovery_url": "https://www.indeed.com/cmp/Grafana-Labs-1/jobs",
+          "official_careers": "https://grafana.com/about/careers/",
+          "source_name": "Grafana Labs Careers"
+        }
+      ],
+      "already_monitored": [
+        "Canonical"
+      ]
+    },
+    {
+      "name": "Indeed China",
+      "url": "https://cn.indeed.com/",
+      "type": "job_board_discovery",
+      "mode": "manual_discovery_only",
+      "source_of_record": false,
+      "reviewed_on": "2026-09-24",
+      "queries": [
+        "site:cn.indeed.com 远程 Java",
+        "site:cn.indeed.com 后端 Kotlin",
+        "site:cn.indeed.com Golang remote"
+      ],
+      "verification_rule": "Live official employer posting required. China location does not prove fully remote; retain office/hybrid requirements. No automatic Indeed search crawler configured.",
+      "candidate_sources": [
+        {
+          "company": "Kody",
+          "discovery_url": "https://cn.indeed.com/q-%E8%BF%9C%E7%A8%8B%E5%8A%9E%E5%85%AC-java-%E8%81%8C%E4%BD%8D.html",
+          "official_ats": "https://apply.workable.com/kody/",
+          "status": "manual_review",
+          "reason": "Shenzhen Kotlin lead describes occasional office/Hong Kong collaboration; do not classify as fully remote without official verification"
+        }
+      ]
+    }
+  ]
+}

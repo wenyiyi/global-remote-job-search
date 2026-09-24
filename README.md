@@ -10,7 +10,7 @@ Run the interactive setup for the first use:
 python3 scripts/job_search.py --setup
 ```
 
-The script will ask for candidate location/time zone, excluded employer countries (China by default), backend experience, optional resume path, skills, target roles, matching threshold, and job freshness requirements. Unknown employer countries are retained and labeled for verification. It then generates `config/private.json` with permission mode `600`.
+The script will ask for candidate location/time zone, excluded employer countries (China by default), backend experience, optional resume path, skills, target roles, matching threshold, result count, and job freshness requirements. Unknown employer countries are retained and labeled for verification. It then generates `config/private.json` with permission mode `600`.
 
 This file is excluded by `.gitignore`.
 
@@ -26,11 +26,15 @@ Blockchain, Web3, cryptocurrency, crypto-exchange, DeFi, NFT, on-chain, smart-co
 
 Enable job sources in `config/sources.json`. For Greenhouse, Lever, and Ashby, the `board_token`, `site`, and `board` fields are public recruitment page identifiers, not secrets.
 
+`config/company_watchlist.json` is an optional private company discovery list; copy `config/company_watchlist.example.json` to create it locally. `active` entries have verified official careers/ATS links; `excluded` entries remain visible but are not queried because they are Web3/crypto employers; `manual_review` entries are ambiguous names, recruiters, local-only employers, or companies without a verified public feed. A manual-review entry must not be promoted to an automated source until its official company identity and permitted public endpoint are verified.
+
+`config/discovery_catalogs.json` tracks curated directories used to discover additional job boards and remote-first companies. Awesome Remote Job is integrated in this mode. Catalogs and their README descriptions are leads only: every source still requires an independent access-policy check, and every recommended vacancy must be confirmed on a live official company Careers/ATS posting with a China-compatible location policy.
+
 Before adding new sources, read `references/source-policy.md`.
 
 ## Feishu Company Exclusion Table
 
-Copy `config/company_exclusion_table.example.json` to the ignored private file `config/company_exclusion_table.json`, then fill in your own Feishu Base identifiers. It can point to a table containing companies that must not be pushed again. The configured `公司名称` column is read live before every non-fixture run. Matching ignores case, harmless punctuation, corporate suffixes, Markdown-link formatting, and common domain suffixes. If the table is unavailable or authorization has expired, the run stops without sending jobs.
+`config/company_exclusion_table.json` can point to a Feishu Base table containing companies that must not be pushed again. The configured `公司名称` column is read live before every non-fixture run. Matching ignores case, harmless punctuation, corporate suffixes, Markdown-link formatting, and common domain suffixes. If the table is unavailable or authorization has expired, the run stops without sending jobs.
 
 Otherwise-qualified jobs removed by this table are still shown in a separate audit section in the Markdown report and Feishu card. They are not counted as recommendations. The audit displays up to 30 jobs and always shows the full filtered count.
 
@@ -222,6 +226,16 @@ The following sources are marked as manual review only:
 * Remote.com
 * Wellfound
 * Jobgether
+* Awesome Remote Job discovery catalog
+* Real Work From Anywhere
+* Remote Backend Jobs
+* JobsCollider
+* AI Dev Jobs
+* Golangprojects
+* WAHJobQueen
+* Paybump
+* Jobright
+* Après
 
 Future improvements may include:
 
@@ -231,3 +245,11 @@ Future improvements may include:
 * Compliant secondary verification of job details
 
 Before enabling any new source, verify its terms, robots rules, APIs/RSS availability, and reasonable request frequency.
+
+## Coverage diagnostics and regression checks
+
+Remote OK combines its public API with category JSON feeds and deduplicates by job ID. These bounded recent feeds do not provide complete historical coverage. Reports include per-source fetch counts, filtering reasons, and partial failures.
+
+Indeed and Indeed China remain manual discovery sources; verified employer ATS boards are queried separately. Neither Indeed site is configured for automatic scraping.
+
+Run offline regression checks with `python3 tests/test_regressions.py`. No personal configuration or live notifications are needed. Keep populated company watchlists, exclusion-table credentials, candidate profiles, resumes, and generated reports local; publish only blank examples.

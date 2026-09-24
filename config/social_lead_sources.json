@@ -1,0 +1,179 @@
+{
+  "provenance": "Public discovery channels; all leads require official employer verification.",
+  "official_verification_required": true,
+  "sources": [
+    {
+      "name": "Xiaohongshu remote-work creators",
+      "category": "social",
+      "url": "https://www.xiaohongshu.com",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "SmartDeer",
+      "category": "social-job-community",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "Freelab 自由客实验室",
+      "category": "freelance-community",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Lapins.ai",
+      "category": "Europe-US jobs",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "NextJob",
+      "category": "freelance-marketplace",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Women in Tech DB",
+      "category": "community",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "电鸭社区",
+      "category": "remote-community",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "RW数字游民",
+      "category": "remote-community",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "Unix数字游民",
+      "category": "remote-community",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "云工网",
+      "category": "freelance-marketplace",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "圆领",
+      "category": "freelance-marketplace",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "某Boss",
+      "category": "traditional-recruiting",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "L聘",
+      "category": "traditional-recruiting",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Upwork",
+      "category": "freelance-marketplace",
+      "url": "https://www.upwork.com",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Freelancer.com",
+      "category": "freelance-marketplace",
+      "url": "https://www.freelancer.com",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Fiverr",
+      "category": "freelance-marketplace",
+      "url": "https://www.fiverr.com",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Fairygodboss",
+      "category": "job-board",
+      "url": "https://fairygodboss.com/jobs",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "InHerSight",
+      "category": "job-board",
+      "url": "https://www.inhersight.com/jobs",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "PowerToFly",
+      "category": "job-board",
+      "url": "https://powertofly.com/jobs",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "Glints",
+      "category": "Asia-Pacific job-board",
+      "url": "https://glints.com/opportunities/jobs/explore",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "Workew",
+      "category": "remote-job-board",
+      "url": "https://workew.com",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "WAHJobQueen",
+      "category": "work-from-home-blog",
+      "url": "https://www.wahjobqueen.com/home/",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Paybump",
+      "category": "paid-career-platform",
+      "url": "https://www.paybump.com/",
+      "priority": "low",
+      "mode": "manual"
+    },
+    {
+      "name": "Jobright",
+      "category": "account-based-ai-job-platform",
+      "url": "https://jobright.ai/",
+      "priority": "medium",
+      "mode": "manual"
+    },
+    {
+      "name": "Apres",
+      "category": "return-to-work-platform",
+      "url": "https://apresgroup.com/",
+      "priority": "low",
+      "mode": "manual"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Cryptosquare Jobs",
+      "reason": "Web3/crypto-only source"
+    },
+    {
+      "name": "Test IO",
+      "reason": "testing-focused marketplace, outside backend target"
+    }
+  ]
+}
