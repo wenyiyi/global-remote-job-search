@@ -23,3 +23,14 @@ for location in ['Remote','Worldwide','China','Remote, APAC','Remote, Asia','Rem
     job=m.normalized_job('test','1','Example','Backend Engineer','https://example.com/jobs/1','2026-09-24',location,'Build backend APIs')
     assert m.assess(job,cfg)['china_feasibility']!='不建议投', location
 print('LOCATION AND OPTIONAL CONFIG REGRESSIONS OK')
+
+language_cfg={'candidate':{'skills':['Redis','AWS','Java']},'preferences':{'minimum_score':2,'required_languages':['Go','Java','Python','Kotlin']}}
+def language_job(description):
+    return m.assess(m.normalized_job('test','language','Example','Backend Engineer','https://example.com/language','2026-09-24','Worldwide',description), language_cfg)
+for description in ['Java Spring services', 'Python APIs', 'Kotlin services', 'Go backend services', 'Golang backend services']:
+    assert language_job(description) is not None, description
+for description in ['JavaScript Node.js', 'Rust with Redis and Kafka', 'go to market', 'distributed systems with PostgreSQL']:
+    assert language_job(description) is None, description
+assert language_job('Java Redis AWS Kafka')['score'] == language_job('Java')['score']
+assert language_job('Golang. Location: Mostly remote (within Germany), with monthly in-person collaboration at our Berlin office')['china_feasibility'] == '不建议投'
+print('LANGUAGE AND PARENTHESIZED LOCATION REGRESSIONS OK')

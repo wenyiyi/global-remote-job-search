@@ -375,7 +375,7 @@ def explicit_location_exclusion(job):
         rf"\blocation\s*:\s*(?P<geo>{RESTRICTED_GEO})\b(?:\s*[-–—,/()]?\s*remote)?",
         rf"\b(?:must|need|required)\s+(?:to\s+)?(?:be\s+)?(?:based|located|resident|reside)\s+in\s+(?P<geo>{RESTRICTED_GEO})\b",
         rf"\b(?:only hiring|hire|candidates?|applicants?)\s+(?:people\s+)?(?:based|located|living|resident)?\s*(?:in|from)\s+(?P<geo>{RESTRICTED_GEO})\b",
-        rf"\bremote\s+(?:only\s+)?(?:within|from|in)\s+(?P<geo>{RESTRICTED_GEO})\b",
+        rf"\bremote\s*\(?\s*(?:only\s+)?(?:within|from|in)\s+(?P<geo>{RESTRICTED_GEO})\b",
         r"\bopen\s+to\s+candidates?(?:\s+based)?\s+(?:across|in)\s+(?P<geo>european)\s+time\s*zones?\b",
         r"\b(?P<geo>european)\s+time\s*zones?\s+(?:availability\s+)?(?:is\s+)?(?:a\s+)?(?:hard\s+)?requirement\b",
         r"\bcandidates?\s+based\s+in\s+(?P<geo>european)\s+time\s*zones?\b",
@@ -553,8 +553,25 @@ def wikidata_company_profiles(companies, delay=.25):
     return found
 
 
+def language_present(language, text):
+    """Match programming languages without treating JavaScript or ordinary verbs as matches."""
+    language = language.strip().lower()
+    if language in ("go", "golang"):
+        return bool(re.search(
+            r"\bgolang\b|\bgo\s+(?:language|developer|engineer|backend|programming)\b|"
+            r"\b(?:written|programming|developing|coding)\s+in\s+go\b|"
+            r"\b(?:experience|proficiency|proficient)\s+(?:with|in)\s+go\b",
+            text, re.I
+        ) or re.search(r"\bGo\b(?!\s+(?:to|ahead|through|beyond|back|forward)\b|-(?:to|getter)\b)", text))
+    return bool(re.search(r"(?<![a-z0-9])" + re.escape(language) + r"(?![a-z0-9])", text, re.I))
+
+
 def assess(job, cfg):
     if is_blockchain_job(job): return None
+    original_text = job["title"] + " " + job["description"]
+    required_languages = cfg["preferences"].get("required_languages", [])
+    if required_languages and not any(language_present(language, original_text) for language in required_languages):
+        return None
     title = job["title"].lower(); scope = job["remote_scope_raw"].lower(); text = (title + " " + job["description"]).lower()
     title_match=any(w in title for w in TITLE_WORDS) or bool(re.search(
         r"\b(?:java|kotlin|jvm|python|golang|go)\s+(?:software\s+)?(?:developer|engineer)\b", title))
@@ -584,12 +601,12 @@ def assess(job, cfg):
     else:
         feasibility, score = "值得确认", 2.0
     title_bonus = 1.5 if title_match else (1.0 if generic_engineer else .5)
-    skills = cfg["candidate"]["skills"]
+    skills = required_languages or cfg["candidate"]["skills"]
     def skill_present(skill):
         # Short skills such as Go/R must use token boundaries ("Go" must not
         # match "global" and "Rust" must not match "trust").
-        if skill.strip().lower() == "go":
-            return bool(re.search(r"\b(?:golang|go\s+(?:language|developer|engineer|backend)|written\s+in\s+go)\b", text))
+        if skill.strip().lower() in ("go", "golang", "java", "python", "kotlin"):
+            return language_present(skill, original_text)
         return bool(re.search(r"(?<![a-z0-9])" + re.escape(skill.lower()) + r"(?![a-z0-9])", text))
     matched = [s for s in skills if skill_present(s)]
     skill_bonus = min(1.0, len(matched) / 4)

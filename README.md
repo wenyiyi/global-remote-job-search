@@ -26,6 +26,8 @@ Blockchain, Web3, cryptocurrency, crypto-exchange, DeFi, NFT, on-chain, smart-co
 
 Enable job sources in `config/sources.json`. For Greenhouse, Lever, and Ashby, the `board_token`, `site`, and `board` fields are public recruitment page identifiers, not secrets.
 
+To require specific programming languages, add a private preference such as `"required_languages": ["Go", "Java", "Python", "Kotlin"]`. A job must explicitly mention at least one configured language; infrastructure, database, and cloud keywords do not count as a language match.
+
 `config/company_watchlist.json` is an optional private company discovery list; copy `config/company_watchlist.example.json` to create it locally. `active` entries have verified official careers/ATS links; `excluded` entries remain visible but are not queried because they are Web3/crypto employers; `manual_review` entries are ambiguous names, recruiters, local-only employers, or companies without a verified public feed. A manual-review entry must not be promoted to an automated source until its official company identity and permitted public endpoint are verified.
 
 `config/discovery_catalogs.json` tracks curated directories used to discover additional job boards and remote-first companies. Awesome Remote Job is integrated in this mode. Catalogs and their README descriptions are leads only: every source still requires an independent access-policy check, and every recommended vacancy must be confirmed on a live official company Careers/ATS posting with a China-compatible location policy.
