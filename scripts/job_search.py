@@ -276,6 +276,30 @@ def fetch_source(src):
                         x.get("date") or x.get("epoch"),location,(x.get("description") or "")+" "+" ".join(x.get("tags") or []),
                         format_compensation(x.get("salary_min"),x.get("salary_max"),"USD","year")))
         return jobs
+    if kind == "themuse":
+        key = os.environ.get(src.get("api_key_env", "THEMUSE_API_KEY"))
+        if not key:
+            raise RuntimeError(f"{src.get('api_key_env', 'THEMUSE_API_KEY')} is required for The Muse API")
+        jobs=[]; failures=[]; page_counts=[]
+        for page in range(max(1, int(src.get("max_pages", 1)))):
+            query={"page":page, "descending":"true", "location":src.get("location", "Flexible / Remote"), "api_key":key}
+            try:
+                data=fetch_json(src["url"]+"?"+parse.urlencode(query))
+                rows=data.get("results", [])
+                page_counts.append({"page":page,"count":len(rows),"page_count":data.get("page_count")})
+                for x in rows:
+                    locations="; ".join(str(item.get("name", "")).strip() for item in x.get("locations", []) if item.get("name")) or "Not stated"
+                    jobs.append(normalized_job(name, x.get("id"), (x.get("company") or {}).get("name") or "Unknown", x.get("name"),
+                        (x.get("refs") or {}).get("landing_page"), x.get("publication_date"), locations, x.get("contents") or ""))
+                if not rows: break
+            except Exception as exc:
+                failures.append(f"page {page}: {type(exc).__name__}")
+            time.sleep(float(src.get("query_delay_seconds", 1)))
+        src["fetch_diagnostics"]={"pages":page_counts,"errors":failures,"unique":len({uid(job) for job in jobs}),
+            "coverage":"Newest first; bounded pages of The Muse Flexible / Remote API results"}
+        if not page_counts:
+            raise RuntimeError("All The Muse API pages failed: " + "; ".join(failures))
+        return jobs
     if kind == "jobicy":
         url=src["url"]+"?"+parse.urlencode({"count":src.get("count",200),"industry":"engineering"})
         rows=fetch_json(url).get("jobs", [])
@@ -402,7 +426,7 @@ def is_specific_non_china_location(scope):
     if re.search(r"\bremote\b", value) and not GLOBAL_GEO.search(value):
         geography=re.sub(r"\bremote\b", "", value)
         geography=re.sub(r"[\s,;()/|:–—-]+", " ", geography).strip()
-        if geography and geography not in ("fully", "fully remote", "multiple locations", "not stated", "unspecified", "first", "friendly", "only", "100%"):
+        if geography and geography not in ("fully", "fully remote", "flexible", "multiple locations", "not stated", "unspecified", "first", "friendly", "only", "100%"):
             return True
     if any(word in value for word in DIRECT + CONFIRM) or value in ("any", "anywhere in the world"):
         return False

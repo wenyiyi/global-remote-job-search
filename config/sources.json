@@ -662,6 +662,20 @@
       "discovery_source": "Indeed"
     },
     {
+      "name": "The Muse API",
+      "kind": "themuse",
+      "url": "https://www.themuse.com/api/public/jobs",
+      "docs": "https://www.themuse.com/developers/api/v2",
+      "enabled": false,
+      "api_key_env": "THEMUSE_API_KEY",
+      "location": "Flexible / Remote",
+      "max_pages": 30,
+      "query_delay_seconds": 1,
+      "access": "Official public Jobs API. Register an app and provide its API key through THEMUSE_API_KEY; direct page scraping is prohibited by The Muse API terms.",
+      "filters": "Newest Flexible / Remote API results; preserve every returned location, then apply language, freshness, Web3, company-exclusion, and China-remote rules. Flexible / Remote plus a country/city is not treated as worldwide eligibility.",
+      "rate_seconds": 2
+    },
+    {
       "name": "Indeed China",
       "kind": "manual",
       "url": "https://cn.indeed.com/",

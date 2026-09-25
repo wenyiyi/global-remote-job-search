@@ -20,6 +20,7 @@ Use a descriptive User-Agent, sequential requests, the configured delay, and at 
 ## Requested discovery sites
 
 - Automated: Remotive, Remote OK, and We Work Remotely use their documented public API or RSS feed.
+- Configurable public API: The Muse Jobs API requires registering an app for production use. Set `THEMUSE_API_KEY` in the runtime environment before enabling its bounded newest-first `Flexible / Remote` pagination. Never scrape The Muse pages; its API terms expressly prohibit web scraping.
 - Configurable ATS: Greenhouse and Workable use official public published-job endpoints, but each entry needs a company board token or account subdomain. Do not attempt to enumerate customer identifiers.
 - Manual only: LinkedIn, Glassdoor, FlexJobs, Wellfound, and Y Combinator restrict or do not authorize general automated extraction. Keep these entries disabled and never browser-automate them from this skill.
 - Manual until a documented jobs feed is available: Remote.com and Jobgether. Their public job pages can be opened by the user, but this skill must not depend on undocumented internal endpoints or page scraping.

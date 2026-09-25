@@ -34,3 +34,20 @@ for description in ['JavaScript Node.js', 'Rust with Redis and Kafka', 'go to ma
 assert language_job('Java Redis AWS Kafka')['score'] == language_job('Java')['score']
 assert language_job('Golang. Location: Mostly remote (within Germany), with monthly in-person collaboration at our Berlin office')['china_feasibility'] == '不建议投'
 print('LANGUAGE AND PARENTHESIZED LOCATION REGRESSIONS OK')
+
+import os
+os.environ['THEMUSE_API_KEY']='test-key'
+muse_src={'kind':'themuse','name':'The Muse API','url':'https://www.themuse.com/api/public/jobs','api_key_env':'THEMUSE_API_KEY','max_pages':2,'query_delay_seconds':0}
+muse_page={'page_count':2,'results':[{'id':1,'name':'Java Backend Engineer','company':{'name':'Example'},'refs':{'landing_page':'https://www.themuse.com/jobs/example/java-backend'},'publication_date':'2026-09-24T00:00:00Z','locations':[{'name':'Flexible / Remote'}],'contents':'Build Java services.'}]}
+with patch.object(m,'fetch_json',side_effect=[muse_page,{'page_count':2,'results':[]}]):
+    muse_jobs=m.fetch_source(muse_src)
+assert len(muse_jobs)==1 and muse_jobs[0]['remote_scope_raw']=='Flexible / Remote'
+assert m.assess(muse_jobs[0],language_cfg)['china_feasibility']!='不建议投'
+restricted={**muse_page,'results':[dict(muse_page['results'][0],locations=[{'name':'Flexible / Remote'},{'name':'New York, NY'}]) ]}
+with patch.object(m,'fetch_json',side_effect=[restricted,{'page_count':2,'results':[]}]):
+    assert m.assess(m.fetch_source(muse_src)[0],language_cfg)['china_feasibility']=='不建议投'
+os.environ.pop('THEMUSE_API_KEY')
+try: m.fetch_source(muse_src)
+except RuntimeError: pass
+else: raise AssertionError('missing key must stop The Muse source')
+print('THE MUSE API REGRESSIONS OK')
